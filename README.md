@@ -27,7 +27,7 @@ Este projeto fornece uma ferramenta JavaScript leve e eficiente para verificar o
 <div id="infos-ao-cliente"></div>
 ```
 
-- Não é necessário fazer uma chamada, pois já ocorre no script. Provavelmente o código funcionará após adicionar os elementos <div> e <script> acima.
+- Não é necessário fazer uma chamada, pois já ocorre no script. Provavelmente o código funcionará após adicionar os dois elementos acima (div e script).
 
 
 ## Resultados
