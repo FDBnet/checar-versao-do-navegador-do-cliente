@@ -24,15 +24,10 @@ Este projeto fornece uma ferramenta JavaScript leve e eficiente para verificar o
 
 2. Adicione um elemento para exibir as mensagens ao cliente:
 ```html
-<div id="infos-sobre-cliente"></div>
+<div id="infos-ao-cliente"></div>
 ```
 
-3. Execute a verificação:
-```html
-<script>
-var verificar = checarNavegador();
-</script>
-```
+- Não é necessário fazer uma chamada, pois já ocorre no script. Provavelmente o código funcionará após adicionar os elementos <div> e <script> acima.
 
 
 ## Resultados
