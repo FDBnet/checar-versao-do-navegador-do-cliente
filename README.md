@@ -38,10 +38,10 @@ var verificar = checarNavegador();
 ## Resultados
 O script retorna um objeto com as seguintes propriedades:
 
-| s: Nível de suporte (0: não suportado, 1: suporte mínimo, 2: suporte completo)
-| j: JavaScript habilitado (sempre true se o script estiver rodando)
-| f: Suporte completo (true se s == 2)
-| m: Suporte mínimo (true se s >= 1)
+- `s`: Nível de suporte (0: não suportado, 1: suporte mínimo, 2: suporte completo)
+- `j`: JavaScript habilitado (sempre true se o script estiver rodando)
+- `f`: Suporte completo (true se `s == 2`)
+- `m`: Suporte mínimo (true se `s >= 1`)
 
 ## Compatibilidade
 Este script é otimizado para funcionar em uma ampla gama de dispositivos, incluindo:
