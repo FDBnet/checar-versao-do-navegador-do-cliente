@@ -37,48 +37,50 @@
                 if (/Android/.test(ua)) return { nome: 'a', versao: parseInt(match[2], 10) };
             }
 
-            var versionMatch = ua.match(/version\/(\d+)/i);
+            var versaoDaMatch = ua.match(/version\/(\d+)/i);
             return { 
                 nome: match[1].slice(0, 1).toLowerCase(), 
-                versao: parseInt(versionMatch ? versionMatch[1] : match[2], 10) 
+                versao: parseInt(versaoDaMatch ? versaoDaMatch[1] : match[2], 10) 
             };
         }
 
-        function redirecionarOuAvisar(navegador, suporte) {
-            var paginaRedirecionamento = '/navegadores/desatualizado';
-            
-            if (suporte === 0) {
-                window.location.href = paginaRedirecionamento;
-            } else if (suporte === 1) {
-                var elemento = document.getElementById('infos-ao-cliente');
-                if (elemento) {
-                    elemento.textContent = "Seu navegador (app) de internet funciona, mas está um pouco desatualizado. Para uma experiência melhor e mais segura, recomendamos atualizá-lo. Isso garantirá que você continue usando este sistema sem problemas no futuro.  ";
-                    elemento.className = 'info';
-                    elemento.style.visibility = 'visible'
-                    
-                    var link = document.createElement('a');
-                    link.href = urlsAtualizacao[navegador.nome] || '#';
-                    link.target = '_blank';
-                    link.textContent = ' Clique para Atualizar.';
-                    elemento.appendChild(link);
+        function avisarCliente(navegador, suporte) {
+            var elemento = document.getElementById('infos-ao-cliente');
+            if (elemento) {
+                var textoAviso = "";
+                var classeAviso = "";
+                if (suporte === 0) {
+                    textoAviso = "Seu navegador (app) de internet não suporta este sistema.  ";
+                    classeAviso = 'info';
+                } else if (suporte === 1) {                    
+                    textoAviso = "Seu navegador (app) de internet funciona, mas está um pouco desatualizado. Para uma experiência melhor e mais segura, recomendamos atualizá-lo. Isso garantirá que você continue usando este sistema sem problemas no futuro.  ";
+                    classeAviso = 'info';
                 }
+                elemento.textContent = textoAviso;
+                elemento.className = classeAviso;
+                elemento.style.visibility = 'visible';
+                var link = document.createElement('a');
+                link.href = urlsAtualizacao[navegador.nome] || '#';
+                link.target = '_blank';
+                link.textContent = ' Clique para Atualizar.';
+                elemento.appendChild(link);
             }
         }
 
         var navegador = detectarNavegador();
         var versaoRequerida = versoes[navegador.nome];
 
-        if (!versaoRequerida) return { suporte: 0, javascript: true, funcionalidadesCompletas: false, minimo: false };
+        if (!versaoRequerida) return { s: 0, j: true, f: false, m: false };
 
         var suporte = navegador.versao >= versaoRequerida[0] ? (navegador.versao >= versaoRequerida[1] ? 2 : 1) : 0;
 
-        redirecionarOuAvisar(navegador, suporte);
+        avisarCliente(navegador, suporte);
 
         return { 
-            suporte: suporte, 
-            javascript: true, 
-            funcionalidadesCompletas: suporte === 2, 
-            minimo: suporte >= 1 
+            s: suporte, 
+            j: true, 
+            f: suporte === 2, 
+            m: suporte >= 1 
         };
     };
 
