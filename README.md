@@ -47,8 +47,8 @@ O script retorna um objeto com as seguintes propriedades:
 Este script é otimizado para funcionar em uma ampla gama de dispositivos, incluindo:
 
 ## Navegadores modernos (Chrome, Firefox, Safari, Edge, Brave, etc.)
-Navegadores antigos (incluindo IE11)
-Dispositivos com recursos limitados (presume-se até 1 GB de RAM)
+- Navegadores antigos (incluindo IE11)
+- Dispositivos com recursos limitados (presume-se até 1 GB de RAM)
 
 ## Segurança
 O script utiliza práticas seguras de programação, evitando vulnerabilidades comuns como injeção de script.
