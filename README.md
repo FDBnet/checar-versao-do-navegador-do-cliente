@@ -38,6 +38,8 @@ O script retorna um objeto com as seguintes propriedades:
 - `f`: Suporte completo (true se `s == 2`)
 - `m`: Suporte mínimo (true se `s >= 1`)
 
+- Além disso, modifica a classe e o texto do elemento `<div id="infos-ao-cliente"></div>` informando ao cliente caso `s` seja = `0` ou `1`.
+
 ## Compatibilidade
 Este script é otimizado para funcionar em uma ampla gama de dispositivos, incluindo:
 
