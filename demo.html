@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>checarNavegadorCliente — demo</title>
+<style>
+    body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+           max-width: 820px; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; color: #222; }
+    h1 { margin-top: 0; }
+    h2 { margin-top: 2rem; border-bottom: 1px solid #eee; padding-bottom: 0.3rem; }
+    code { background: #f4f4f4; padding: 1px 5px; border-radius: 3px; font-size: 0.9em; }
+    pre { background: #f4f4f4; padding: 1rem; border-radius: 5px; overflow-x: auto;
+          font-size: 0.85em; }
+    .info { background: #fffbe6; padding: 10px 12px; border: 1px solid #ffe58f;
+            border-radius: 4px; margin: 0.5rem 0; }
+    .info a { color: #1864ab; margin-left: 0.4em; }
+    .box { border: 1px solid #ddd; border-radius: 5px; padding: 1rem; margin: 0.7rem 0;
+           background: #fafafa; }
+    button { background: #1864ab; color: white; border: 0; padding: 8px 14px;
+             border-radius: 4px; cursor: pointer; font-size: 0.9em; margin-right: 0.4rem; }
+    button:hover { background: #144d86; }
+    .row { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.5rem 0; }
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 10px;
+            font-size: 0.8em; font-weight: bold; }
+    .pill-2 { background: #d3f9d8; color: #2b8a3e; }
+    .pill-1 { background: #fff3bf; color: #8a6700; }
+    .pill-0 { background: #ffe3e3; color: #c92a2a; }
+</style>
+</head>
+<body>
+    <h1>Demo — checarNavegadorCliente v3</h1>
+    <p>Esta página testa a biblioteca carregada do arquivo minificado ao lado.
+    Recarregue a página em navegadores diferentes para ver detecção ao vivo.</p>
+
+    <h2>1. Aviso automático (auto-execução no load)</h2>
+    <p>A <code>&lt;div id="infos-ao-cliente"&gt;</code> abaixo é preenchida automaticamente
+       pela biblioteca. Se o seu navegador está atualizado, ela fica vazia.</p>
+    <div id="infos-ao-cliente"></div>
+
+    <h2>2. Resultado da checagem atual</h2>
+    <div class="box">
+        <div id="resumo"></div>
+        <pre id="dump"></pre>
+    </div>
+
+    <h2>3. Testes interativos com overrides</h2>
+    <div class="row">
+        <button onclick="testarExigindoUltimo()">Exigir Chrome 130+ (deve mostrar desatualizado/não-suportado)</button>
+        <button onclick="testarMensagemCustom()">Mensagem customizada</button>
+        <button onclick="testarSemDom()">Sem DOM (só retorno + evento)</button>
+        <button onclick="limpar()">Limpar</button>
+    </div>
+    <div class="box">
+        <div id="aviso-custom" style="min-height: 1em;"></div>
+        <pre id="log"></pre>
+    </div>
+
+    <h2>4. Evento <code>navegador:checado</code></h2>
+    <pre id="eventos">(aguardando eventos...)</pre>
+
+    <script src="checarNavegadorCliente.min.js"></script>
+    <script>
+    (function () {
+        var log = document.getElementById('log');
+        var dump = document.getElementById('dump');
+        var resumo = document.getElementById('resumo');
+        var eventos = document.getElementById('eventos');
+        var contagemEventos = 0;
+
+        window.addEventListener('navegador:checado', function (e) {
+            contagemEventos++;
+            eventos.textContent =
+                '[' + contagemEventos + '] ' +
+                e.detail.navegador.nome + ' ' + e.detail.navegador.versao +
+                '  →  ' + e.detail.classificacao +
+                '\n\n' + eventos.textContent;
+        });
+
+        function cor(nivel) { return 'pill pill-' + nivel; }
+        function renderizar(r) {
+            dump.textContent = JSON.stringify(r, null, 2);
+            resumo.innerHTML =
+                '<span class="' + cor(r.nivel) + '">' + r.classificacao + '</span> ' +
+                '<strong>' + (r.navegador.nome || '(desconhecido)') + '</strong> ' +
+                (r.navegador.versao || '') +
+                '  ·  detecção: ' + (r.deteccao.metodo || 'nenhuma');
+        }
+
+        // Mostrar resultado da auto-execução (roda sem tocar em DOM custom, só relendo)
+        // Precisa esperar o load ter ocorrido. Se já passou, chamamos direto.
+        function atualizarResumo() {
+            var r = checarNavegadorCliente({ elemento: null, dispararEvento: false });
+            renderizar(r);
+        }
+        if (document.readyState === 'complete') atualizarResumo();
+        else window.addEventListener('load', atualizarResumo);
+
+        window.testarExigindoUltimo = function () {
+            var r = checarNavegadorCliente({
+                versoes: { c: [130, 135], f: [125, 130], s: [17.5, 18], e: [130, 135] },
+                elemento: '#aviso-custom',
+                classe: 'info'
+            });
+            log.textContent = 'Com override exigindo versões muito novas:\n\n' +
+                              JSON.stringify(r, null, 2);
+        };
+
+        window.testarMensagemCustom = function () {
+            var r = checarNavegadorCliente({
+                versoes: { c: [999, 1000], f: [999, 1000], s: [999, 1000], e: [999, 1000] },
+                mensagens: {
+                    naoSuportado: 'AVISO: este sistema exige navegador muito recente.',
+                    linkAtualizar: 'Saiba mais aqui.'
+                },
+                elemento: '#aviso-custom'
+            });
+            log.textContent = 'Com mensagem customizada forçando naoSuportado:\n\n' +
+                              JSON.stringify(r, null, 2);
+        };
+
+        window.testarSemDom = function () {
+            document.getElementById('aviso-custom').textContent = '';
+            var r = checarNavegadorCliente({ elemento: null });
+            log.textContent = 'Sem tocar em DOM (elemento: null):\n\n' +
+                              JSON.stringify(r, null, 2);
+        };
+
+        window.limpar = function () {
+            document.getElementById('aviso-custom').innerHTML = '';
+            log.textContent = '';
+        };
+    })();
+    </script>
+</body>
+</html>

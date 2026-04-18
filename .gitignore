@@ -1,0 +1,33 @@
+# Dependências
+node_modules/
+.npm/
+.pnp.*
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor / OS
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Ambientes
+.env
+.env.*
+!.env.example
+
+# Saídas temporárias
+/tmp/
+/dist/
+/coverage/
+*.tgz

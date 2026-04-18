@@ -1,0 +1,58 @@
+{
+  "name": "checar-versao-do-navegador-do-cliente",
+  "version": "3.0.0",
+  "description": "Biblioteca JavaScript leve (~9 KB min) para detectar o navegador do cliente, classificar o nível de suporte e avisar o usuário quando for necessário atualizar. Parametrizável, UMD (script/require/import), IE11-safe.",
+  "main": "checarNavegadorCliente.js",
+  "module": "checarNavegadorCliente.js",
+  "browser": "checarNavegadorCliente.min.js",
+  "unpkg": "checarNavegadorCliente.min.js",
+  "jsdelivr": "checarNavegadorCliente.min.js",
+  "files": [
+    "checarNavegadorCliente.js",
+    "checarNavegadorCliente.min.js",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "terser checarNavegadorCliente.js -c passes=2 -m --comments \"/^!/\" -o checarNavegadorCliente.min.js",
+    "test": "node tests/suite.js",
+    "test:min": "node tests/suite.js --min",
+    "prepublishOnly": "npm run build && npm test && npm run test:min"
+  },
+  "keywords": [
+    "navegador",
+    "browser",
+    "detection",
+    "user-agent",
+    "client-hints",
+    "deteccao",
+    "versao",
+    "version",
+    "suporte",
+    "compatibilidade",
+    "ie11",
+    "legacy",
+    "pt-br"
+  ],
+  "author": "Rodrigo — Fortaleza Digital da Bahia Softwares & TI Ltda",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FDBnet/checar-versao-do-navegador-do-cliente.git"
+  },
+  "bugs": {
+    "url": "https://github.com/FDBnet/checar-versao-do-navegador-do-cliente/issues"
+  },
+  "homepage": "https://github.com/FDBnet/checar-versao-do-navegador-do-cliente#readme",
+  "engines": {
+    "node": ">=14"
+  },
+  "sideEffects": [
+    "checarNavegadorCliente.js",
+    "checarNavegadorCliente.min.js"
+  ],
+  "devDependencies": {
+    "terser": "^5.34.1"
+  }
+}

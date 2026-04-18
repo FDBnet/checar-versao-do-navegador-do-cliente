@@ -1,0 +1,15 @@
+# Este arquivo é redundante com o campo "files" do package.json (allowlist),
+# mas mantido como defesa em profundidade caso alguém remova "files".
+
+# Tudo é excluído por padrão; o campo "files" no package.json é a allowlist canônica.
+# Este .npmignore garante que se algo escapar, o essencial fica fora do tarball publicado.
+
+node_modules/
+tests/
+.github/
+demo.html
+.gitignore
+.npmignore
+.editorconfig
+*.log
+.DS_Store

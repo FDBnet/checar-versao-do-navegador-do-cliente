@@ -1,57 +1,410 @@
 # Checar Versão do Navegador do Cliente
-Código em JS para verificar a versão do navegador do cliente e permitir que o Dev tome decisões a partir disso. Este código é extremamente leve e compatível inclusive com Internet Explorer (IE) 11.
 
-## Descrição
+[![npm version](https://img.shields.io/npm/v/checar-versao-do-navegador-do-cliente.svg)](https://www.npmjs.com/package/checar-versao-do-navegador-do-cliente)
+[![CI](https://github.com/FDBnet/checar-versao-do-navegador-do-cliente/actions/workflows/ci.yml/badge.svg)](https://github.com/FDBnet/checar-versao-do-navegador-do-cliente/actions/workflows/ci.yml)
+[![Minified size](https://img.shields.io/bundlephobia/min/checar-versao-do-navegador-do-cliente)](https://bundlephobia.com/package/checar-versao-do-navegador-do-cliente)
+[![Downloads](https://img.shields.io/npm/dm/checar-versao-do-navegador-do-cliente.svg)](https://www.npmjs.com/package/checar-versao-do-navegador-do-cliente)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Este projeto fornece uma ferramenta JavaScript leve e eficiente para verificar o suporte do navegador a algo, como a algum recurso específico. Ele é projetado para funcionar em uma ampla gama de dispositivos, desde navegadores modernos até dispositivos antigos com recursos limitados.
+Biblioteca JavaScript leve (≈ 9 KB minificada, zero dependências) para detectar o navegador
+do cliente, classificar o nível de suporte e avisar o usuário quando for necessário
+atualizar. Parametrizável por chamada, com API ergonômica para desenvolvedor e
+compatibilidade preservada com IE11.
 
-## Características
+- **Versão:** 3.0.0
+- **Licença:** MIT
 
-- Detecção automática do navegador e versão
-- Mensagens personalizadas para diferentes níveis de suporte
-- Links para atualização do navegador (quando aplicável)
-- Otimizado para performance e baixo consumo de recursos
-- Compatível com navegadores antigos (incluindo IE11)
-- Armazenamento local para evitar verificações repetidas
+## Sumário
 
-## Como Usar
+- [O que mudou na v3](#o-que-mudou-na-v3)
+- [Instalação](#instalação)
+- [Uso mínimo](#uso-mínimo)
+- [Uso programático](#uso-programático)
+- [Uso via bundler (ES modules / CommonJS)](#uso-via-bundler-es-modules--commonjs)
+- [Configuração (`Config`)](#configuração-config)
+- [Retorno (`Resultado`)](#retorno-resultado)
+- [Eventos](#eventos)
+- [Navegadores detectados](#navegadores-detectados)
+- [Como o suporte é classificado](#como-o-suporte-é-classificado)
+- [Segurança](#segurança)
+- [Compatibilidade](#compatibilidade)
+- [Desenvolvimento](#desenvolvimento)
+- [Migrando da v1 para a v3](#migrando-da-v1-para-a-v3)
+- [Contribuições](#contribuições)
 
-1. Inclua o script em seu HTML:
+## O que mudou na v3
+
+A v3 é uma reescrita completa focada em correção, segurança e experiência do
+desenvolvedor. Ela preserva os campos de retorno antigos (`s`, `j`, `f`, `m`), então
+código chamador da v1 continua funcionando sem alterações.
+
+Bugs críticos da v1 que a v3 corrige:
+
+- Edge (Chromium) agora é detectado corretamente — antes caía em `Chrome` por causa
+  do token `Edg/` (não `Edge/`) no user agent.
+- Chrome iOS (`CriOS/`), Firefox iOS (`FxiOS/`) e Edge iOS (`EdgiOS/`) são identificados
+  corretamente — antes todos caíam em Safari.
+- Safari 17.4 e outras versões decimais são comparadas como decimais — antes
+  `parseInt` truncava e impedia atingir suporte completo.
+- User agents desconhecidos não quebram mais a execução — a v1 lançava `TypeError`
+  em `.slice` sobre `undefined`.
+- Usuários com navegador totalmente atualizado não recebem mais o link
+  "Clique para atualizar" indevidamente.
+- Link de atualização agora tem `rel="noopener noreferrer"` (mitigação de
+  tabnabbing reverso).
+- URLs usam `https://` explícito.
+
+Novidades de DX:
+
+- Configuração completa por chamada: versões, URLs, mensagens, seletor do elemento,
+  classe CSS, nome do evento, debug.
+- Retorno enriquecido com nomes legíveis (`'Chrome'` em vez de só `'c'`),
+  classificação como string (`'suportado' | 'desatualizado' | 'nao-suportado'`)
+  e booleans de conveniência.
+- `CustomEvent` disparado na `window` permite integração desacoplada.
+- Validação de configuração com `TypeError` explicando exatamente qual chave
+  está inválida.
+- Tipagem via JSDoc `@typedef` (intellisense automático no VS Code).
+- Funções internas expostas em `checarNavegadorCliente.interno` para testes.
+
+## Instalação
+
+### Via npm / yarn / pnpm
+
+```bash
+npm install checar-versao-do-navegador-do-cliente
+# ou
+yarn add checar-versao-do-navegador-do-cliente
+# ou
+pnpm add checar-versao-do-navegador-do-cliente
+```
+
+### Via CDN (unpkg ou jsDelivr)
 
 ```html
+<!-- unpkg (sempre a última versão major 3) -->
+<script src="https://unpkg.com/checar-versao-do-navegador-do-cliente@3/checarNavegadorCliente.min.js"></script>
+
+<!-- jsDelivr -->
+<script src="https://cdn.jsdelivr.net/npm/checar-versao-do-navegador-do-cliente@3/checarNavegadorCliente.min.js"></script>
+```
+
+### Download direto
+
+Baixe `checarNavegadorCliente.js` ou `checarNavegadorCliente.min.js` e inclua:
+
+```html
+<div id="infos-ao-cliente"></div>
 <script src="checarNavegadorCliente.js"></script>
 ```
 
-2. Adicione um elemento para exibir as mensagens ao cliente:
+A biblioteca usa formato UMD — funciona diretamente em `<script>`, `require()` e
+`import` sem configuração adicional.
+
+## Uso mínimo
+
 ```html
-<div id="infos-ao-cliente"></div>
+<!doctype html>
+<html lang="pt-br">
+<head>
+    <meta charset="utf-8">
+    <title>Meu sistema</title>
+    <style>.info { background: #fffbe6; padding: 8px; border: 1px solid #ffe58f; }</style>
+</head>
+<body>
+    <div id="infos-ao-cliente"></div>
+
+    <!-- ... resto da página ... -->
+
+    <script src="checarNavegadorCliente.js"></script>
+</body>
+</html>
 ```
 
-- Não é necessário fazer uma chamada, pois já ocorre no script. Provavelmente o código funcionará após adicionar os dois elementos acima (div e script).
+Se o navegador do usuário estiver desatualizado ou não suportado, a `<div>` é
+preenchida com a mensagem apropriada e um link para atualização. Se estiver
+totalmente atualizado, nada acontece.
 
+## Uso programático
 
-## Resultados
-O script retorna um objeto com as seguintes propriedades:
+```js
+// Desliga a auto-execução para controlar o momento
+checarNavegadorCliente.auto = false;
 
-- `s`: Nível de suporte (0: não suportado, 1: suporte mínimo, 2: suporte completo)
-- `j`: JavaScript habilitado (sempre true se o script estiver rodando)
-- `f`: Suporte completo (true se `s == 2`)
-- `m`: Suporte mínimo (true se `s >= 1`)
+// Chama com override parcial
+var resultado = checarNavegadorCliente({
+    versoes: {
+        c: [120, 130],     // Chrome mínimo 120, alvo 130
+        f: [120, 128]      // Firefox mínimo 120, alvo 128
+    },
+    elemento: '#meu-aviso-custom',
+    debug: true
+});
 
-- Além disso, modifica a classe e o texto do elemento `<div id="infos-ao-cliente"></div>` informando ao cliente caso `s` seja = `0` ou `1`.
+if (resultado.naoSuportado) {
+    // Redirecionar, bloquear, registrar telemetria etc.
+}
+```
 
-## Compatibilidade
-Este script é otimizado para funcionar em uma ampla gama de dispositivos, incluindo:
+Sem passar argumentos, `checarNavegadorCliente()` usa todos os defaults — útil
+para executar manualmente em momentos específicos do ciclo de vida da página.
 
-- Navegadores modernos (Chrome, Firefox, Safari, Edge, Brave, etc.)
-- Navegadores antigos (incluindo IE11)
-- Dispositivos com recursos limitados (presume-se até 1 GB de RAM)
+## Uso via bundler (ES modules / CommonJS)
+
+A biblioteca é UMD, então funciona com qualquer bundler (Webpack, Vite, Rollup,
+esbuild, Parcel). Ela detecta o ambiente e usa o mecanismo de export apropriado.
+
+```js
+// ES modules
+import checarNavegadorCliente from 'checar-versao-do-navegador-do-cliente';
+
+const resultado = checarNavegadorCliente({ debug: true });
+if (resultado.naoSuportado) { /* ... */ }
+```
+
+```js
+// CommonJS
+const checarNavegadorCliente = require('checar-versao-do-navegador-do-cliente');
+
+const resultado = checarNavegadorCliente({ debug: true });
+```
+
+**Nota sobre SSR (Next.js, Nuxt, Remix etc.):** em ambiente Node sem `window`
+nem `navigator`, a função retorna `nivel: 0` e `navegador.codigo: null` graciosamente.
+Você pode chamá-la em SSR sem proteção — o resultado será "não suportado" mas não
+causará erro. Para só executar no cliente, faça o check usual:
+
+```js
+if (typeof window !== 'undefined') {
+    const resultado = checarNavegadorCliente();
+}
+```
+
+## Configuração (`Config`)
+
+Todos os campos são opcionais. O que você passar é mesclado sobre os defaults.
+
+| Campo            | Tipo                                           | Default                 | Descrição |
+| ---------------- | ---------------------------------------------- | ----------------------- | --------- |
+| `versoes`        | `{ [codigo]: [minima, recomendada] }`          | Ver [Navegadores](#navegadores-detectados) | Override parcial da tabela de versões. Só os códigos que você passar são sobrescritos. Valores aceitam decimais (Safari 17.4, Brave 1.57). |
+| `urls`           | `{ [codigo]: string }`                         | URLs oficiais           | Override parcial das URLs de atualização. |
+| `mensagens`      | `{ naoSuportado?, desatualizado?, linkAtualizar? }` | Textos em PT-BR    | Override dos textos exibidos ao usuário. |
+| `elemento`       | `string \| HTMLElement \| null \| false`       | `'#infos-ao-cliente'`   | Seletor CSS, referência direta ao elemento, ou `null`/`false` para desativar totalmente a manipulação de DOM. |
+| `classe`         | `string`                                       | `'info'`                | Classe CSS adicionada ao elemento quando há aviso. |
+| `dispararEvento` | `boolean`                                      | `true`                  | Dispara `CustomEvent` na `window`. |
+| `nomeEvento`     | `string`                                       | `'navegador:checado'`   | Nome do evento disparado. |
+| `debug`          | `boolean`                                      | `false`                 | Imprime diagnóstico em `console.info`. |
+
+Também disponíveis como propriedades da função:
+
+- `checarNavegadorCliente.auto` — defina `false` antes do `load` para pular auto-execução.
+- `checarNavegadorCliente.padroes` — objetos com os defaults (`versoes`, `urls`, `mensagens`, `nomes`, `config`).
+- `checarNavegadorCliente.interno` — funções puras para testes (`detectar`, `calcularNivel`, `viaClientHints`, `viaUserAgent`, etc.).
+- `checarNavegadorCliente.versao` — string da versão atual.
+
+## Retorno (`Resultado`)
+
+```js
+{
+    // Classificação
+    nivel: 2,                                 // 0 | 1 | 2
+    classificacao: 'suportado',               // 'suportado' | 'desatualizado' | 'nao-suportado'
+
+    // Booleans derivados
+    suportado: true,          // nivel >= 1
+    suportadoCompleto: true,  // nivel === 2
+    desatualizado: false,     // nivel === 1
+    naoSuportado: false,      // nivel === 0
+
+    // Navegador detectado
+    navegador: {
+        codigo: 'c',                          // código curto
+        nome: 'Chrome',                       // nome legível humano
+        versao: 130,                          // versão detectada
+        versaoMinima: 109,                    // mínima da config
+        versaoRecomendada: 117,               // alvo da config
+        urlAtualizacao: 'https://www.google.com/intl/pt-BR/chrome/update/'
+    },
+
+    // Metadados da detecção
+    deteccao: {
+        metodo: 'client-hints',               // 'client-hints' | 'user-agent' | null
+        userAgent: 'Mozilla/5.0 ...'
+    },
+
+    // Aliases legados (mesmos valores da v1, para retrocompatibilidade)
+    s: 2,    // === nivel
+    j: true, // === true (JavaScript habilitado)
+    f: true, // === suportadoCompleto
+    m: true  // === suportado
+}
+```
+
+Quando o navegador não é reconhecido (user agent incomum, crawler, etc.), o
+retorno é seguro e estruturado:
+
+```js
+{
+    nivel: 0,
+    classificacao: 'nao-suportado',
+    suportado: false, suportadoCompleto: false, desatualizado: false, naoSuportado: true,
+    navegador: {
+        codigo: null, nome: null, versao: 0,
+        versaoMinima: null, versaoRecomendada: null, urlAtualizacao: null
+    },
+    deteccao: { metodo: null, userAgent: '...' },
+    s: 0, j: true, f: false, m: false
+}
+```
+
+## Eventos
+
+O evento `navegador:checado` é disparado na `window` após cada execução (a menos que
+você passe `dispararEvento: false`). O objeto `Resultado` completo fica em `event.detail`.
+
+```js
+window.addEventListener('navegador:checado', function (e) {
+    console.log(e.detail.navegador.nome + ' ' + e.detail.navegador.versao);
+    if (e.detail.naoSuportado) {
+        mostrarBloqueio();
+    }
+});
+```
+
+## Navegadores detectados
+
+| Código | Navegador            | Método primário | Padrão `[min, recomendada]` |
+| :----: | -------------------- | --------------- | :-------------------------: |
+| `c`    | Chrome (e Chrome iOS via `CriOS/`) | Client Hints / UA `Chrome\/` | `[109, 117]` |
+| `f`    | Firefox (e Firefox iOS via `FxiOS/`) | UA `Firefox\/` / `FxiOS\/` | `[115, 119]` |
+| `s`    | Safari               | UA `Version\/` + `Safari\/` | `[16, 17.4]` |
+| `o`    | Opera                | UA `OPR\/` / Client Hints | `[95, 103]` |
+| `e`    | Edge Chromium (e Edge iOS/Android) | UA `Edg\/` / `EdgiOS\/` / `EdgA\/` / Client Hints | `[109, 117]` |
+| `sm`   | Samsung Internet     | UA `SamsungBrowser\/` | `[24, 24]` |
+| `b`    | Brave                | Client Hints (UA é idêntico ao Chrome por política de privacidade) | `[1.48, 1.57]` |
+| `a`    | Android WebView      | UA `; wv)` com `Chrome\/` | `[109, 117]` |
+| `i`    | Internet Explorer    | UA `Trident\/` / `MSIE ` | `[11, 11]` |
+
+**Nota sobre Brave:** o Brave remove deliberadamente o token "Brave" do user agent.
+A detecção só funciona via Client Hints (Chromium 90+). Em navegadores mais antigos,
+Brave é identificado como Chrome — o que é seguro, porque o Brave segue o ciclo de
+release do Chromium.
+
+## Como o suporte é classificado
+
+Cada navegador tem uma faixa `[minimaAceitavel, recomendada]`:
+
+- `versao >= recomendada` → **suporte completo** (nível 2, `suportado` = true, `suportadoCompleto` = true). Nenhum aviso é exibido.
+- `minimaAceitavel <= versao < recomendada` → **desatualizado** (nível 1). Mensagem
+  amigável de atualização é exibida.
+- `versao < minimaAceitavel` → **não suportado** (nível 0). Mensagem indicando
+  incompatibilidade é exibida.
+- Navegador não reconhecido ou sem entrada na tabela → **não suportado** (nível 0).
 
 ## Segurança
-O script utiliza práticas seguras de programação, evitando vulnerabilidades comuns como injeção de script e ataques XSS.
+
+- Nunca usa `innerHTML` — todo texto é inserido via `createTextNode`, imune a XSS
+  via atributos textuais.
+- Todos os links de atualização usam `target="_blank"` com `rel="noopener noreferrer"`,
+  mitigando tabnabbing reverso mesmo em IE11 e WebViews antigos.
+- URLs de atualização são `https://` explícitos — não herdam HTTP quando a página
+  estiver em HTTP.
+- A função pode ser chamada várias vezes com segurança: ela limpa os filhos do elemento
+  antes de reescrever (idempotente).
+- Falhas de DOM, console ou evento são isoladas em `try/catch` e nunca afetam o retorno.
+
+## Compatibilidade
+
+Código em ES5 estrito, sem dependências. Testado contra user agents reais de:
+
+- Chrome, Firefox, Safari, Opera, Edge Chromium
+- Chrome iOS, Firefox iOS, Edge iOS
+- Samsung Internet, Android WebView
+- Internet Explorer 11
+- User agents desconhecidos (crawlers, apps customizados)
+
+## Desenvolvimento
+
+Este projeto usa apenas Node e Terser — sem framework de testes, sem bundler, sem
+transpilação. O fonte é ES5 e pode ser executado diretamente.
+
+### Instalar dependências
+
+```bash
+npm install
+```
+
+Isso instala apenas o Terser (dev dependency) para minificação.
+
+### Scripts disponíveis
+
+```bash
+npm test           # Roda a suíte contra o fonte
+npm run test:min   # Roda a suíte contra o minificado
+npm run build      # Gera checarNavegadorCliente.min.js via Terser
+```
+
+`npm run prepublishOnly` encadeia build + test + test:min automaticamente antes
+de qualquer publicação no npm, garantindo que a versão minificada sempre passa
+pelos mesmos testes do fonte.
+
+### Estrutura
+
+```
+checarNavegadorCliente.js         — Fonte UMD (~25 KB, com JSDoc)
+checarNavegadorCliente.min.js     — Minificado via Terser (~9 KB)
+tests/suite.js                    — Suíte de testes (zero dependências)
+demo.html                         — Página de teste visual manual
+README.md  CHANGELOG.md  LICENSE  — Documentação
+.github/workflows/ci.yml          — CI: testa em Node 14/18/20/22
+package.json                      — Publicação npm
+```
+
+## Migrando da v1 para a v3
+
+Código da v1 continua funcionando. Se você usa as chaves `s`, `j`, `f`, `m` do
+retorno, elas permanecem exatamente como antes.
+
+Ajustes recomendados para aproveitar a v3:
+
+```js
+// Antes (v1):
+var r = checarNavegador();
+if (r.s === 0) bloquear();
+
+// Depois (v3) — mais legível, mesmo efeito:
+var r = checarNavegadorCliente();
+if (r.naoSuportado) bloquear();
+```
+
+Se você customizava o script editando a tabela `versoes` dentro do arquivo, agora
+passe pela config:
+
+```js
+// Antes (v1): precisava editar o .js
+// Depois (v3):
+checarNavegadorCliente.auto = false;
+window.addEventListener('load', function () {
+    checarNavegadorCliente({ versoes: { c: [120, 130] } });
+});
+```
+
+A chamada global antiga era `checarNavegador` (não exportada). Agora é
+`checarNavegadorCliente` (exportada em `window`). Se algum código fazia
+`window.checarNavegador`, atualize para `window.checarNavegadorCliente`.
 
 ## Contribuições
-Contribuições são bem-vindas! Por favor, sinta-se à vontade para submeter pull requests ou abrir issues para sugestões e melhorias.
+
+Issues e pull requests são bem-vindos. Ao contribuir:
+
+- Mantenha a compatibilidade ES5 / IE11. Sem `const`, `let`, `=>`, `async`, template
+  literals, spread, `Object.assign` etc.
+- Use `Array.isArray` (não `instanceof Array`) para robustez em cross-realm.
+- Todo efeito colateral (DOM, evento, console) deve estar isolado em `try/catch`.
+- Novos navegadores/variantes devem ser cobertos em `detectar()` na ordem correta
+  de especificidade e refletidos em `VERSOES_PADRAO`, `URLS_PADRAO` e `NOMES_LEGIVEIS`.
+- Se adicionar campos ao retorno, mantenha os existentes — eles são API pública estável.
 
 ## Licença
-MIT License
+
+MIT. Veja `LICENSE` para o texto completo.

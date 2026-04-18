@@ -1,96 +1,614 @@
-(function() {
-    var checarNavegador = function() {
-        var versoes = {
-            c: [109, 117], f: [115, 119], s: [16, 17.4], o: [95, 103], e: [109, 117],
-            sm: [24, 24], b: [1.48, 1.57], v: [5.6, 6.2], d: [7, 7], i: [11, 11],
-            a: [109, 117]
-        };
+/*!
+ * checarNavegadorCliente — detecção, classificação e aviso de navegador do cliente
+ * Versão: 3.0.0
+ * Licença: MIT
+ *
+ * Destaques:
+ *   - Detecção correta de Chrome, Firefox, Safari, Opera, Edge (Chromium), Edge legado,
+ *     Samsung Internet, Android WebView, Chrome/Firefox/Edge em iOS, Brave (via Client
+ *     Hints) e Internet Explorer 11. Sem colisões silenciosas.
+ *   - Versões decimais preservadas (Safari 17.4, Brave 1.57 etc.).
+ *   - User agents desconhecidos degradam para s=0 sem lançar exceção.
+ *   - Tabela de versões, URLs, mensagens, seletor do elemento, classe CSS e disparo de
+ *     evento são todos configuráveis por chamada.
+ *   - Retorno rico (nomes legíveis, classificação como string, booleans de conveniência)
+ *     com aliases legados (s, j, f, m) preservados para retrocompatibilidade.
+ *   - Dispara CustomEvent 'navegador:checado' na window para integração desacoplada.
+ *   - Modo debug opcional para inspeção em tempo de desenvolvimento.
+ *   - Compatibilidade ES5 / IE11 mantida. Sem dependências.
+ *
+ * Exemplos de uso:
+ *
+ *   // 1) Uso mínimo: adicione <div id="infos-ao-cliente"></div> e o <script>.
+ *   //    Roda automaticamente no load com defaults.
+ *
+ *   // 2) Uso programático com override parcial de versões:
+ *   var r = checarNavegadorCliente({
+ *       versoes: { c: [120, 130], f: [120, 128] },   // sobrescreve só Chrome e Firefox
+ *       elemento: '#meu-aviso-custom',                // outro seletor
+ *       debug: true                                   // console.info com diagnóstico
+ *   });
+ *   if (r.naoSuportado) { ... }
+ *
+ *   // 3) Desabilitar auto-execução e chamar sob demanda:
+ *   checarNavegadorCliente.auto = false;
+ *   // ... depois, no momento certo:
+ *   var r = checarNavegadorCliente({ elemento: null });  // sem tocar no DOM
+ *
+ *   // 4) Ouvir o evento (acoplamento fraco):
+ *   window.addEventListener('navegador:checado', function (e) {
+ *       console.log(e.detail);
+ *   });
+ */
+(function (root, factory) {
+    // UMD: compatível com <script> (global), CommonJS/Node (require) e AMD (define).
+    if (typeof define === 'function' && define.amd) {
+        define([], factory);
+    } else if (typeof module === 'object' && module.exports) {
+        module.exports = factory();
+    } else {
+        root.checarNavegadorCliente = factory();
+    }
+}(typeof self !== 'undefined' ? self : this, function () {
+    'use strict';
 
-        var urlsAtualizacao = {
-            c: '//www.google.com/intl/pt-BR/chrome/update/',
-            f: '//support.mozilla.org/pt-BR/topics/install-and-update/firefox',
-            s: '//support.apple.com/pt-br/safari',
-            o: '//www.opera.com/pt-br/browsers/opera',
-            e: '//www.microsoft.com/pt-br/edge',
-            i: '//www.microsoft.com/pt-br/download/internet-explorer.aspx',
-            sm: '//www.samsung.com/br/apps/samsung-internet/',
-            b: '//brave.com/pt-br/download/',
-            a: '//play.google.com/store/apps/details?id=com.google.android.webview'
-        };
+    // =========================================================================
+    // TIPOS (JSDoc para intellisense no VS Code / Continue)
+    // =========================================================================
 
-        function detectarNavegador() {
-            var ua = navigator.userAgent;
-            var match = ua.match(/(opera|chrome|safari|firefox|msie|trident(?=\/))\/?\s*(\d+)/i) || [];
-            var tem;
-            
-            if (/trident/i.test(match[1])) {
-                tem = /\brv[ :]+(\d+)/g.exec(ua) || [];
-                return { nome: 'i', versao: parseInt(tem[1] || 0, 10) };
-            }
+    /**
+     * @typedef {[number, number]} FaixaVersao  [minimaAceitavel, recomendada]
+     */
 
-            if (match[1] === 'Chrome') {
-                tem = ua.match(/\b(OPR|Edge|Brave|SamsungBrowser)\/(\d+)/);
-                if (tem) {
-                    if (tem[1] === 'SamsungBrowser') return { nome: 'sm', versao: parseInt(tem[2], 10) };
-                    return { nome: tem[1] === 'OPR' ? 'o' : tem[1].slice(0, 1).toLowerCase(), versao: parseInt(tem[2], 10) };
-                }
-                if (/Android/.test(ua)) return { nome: 'a', versao: parseInt(match[2], 10) };
-            }
+    /**
+     * @typedef {Object} NavegadorDetectado
+     * @property {string|null} codigo             Código curto ('c','f','s','o','e','i','sm','b','a') ou null.
+     * @property {string|null} nome               Nome legível ('Chrome','Firefox'...) ou null.
+     * @property {number}      versao             Versão detectada (pode ser decimal). 0 se desconhecido.
+     * @property {number|null} versaoMinima       Mínima aceitável conforme config.
+     * @property {number|null} versaoRecomendada  Alvo de suporte completo conforme config.
+     * @property {string|null} urlAtualizacao     URL oficial para o usuário atualizar.
+     */
 
-            var versaoDaMatch = ua.match(/version\/(\d+)/i);
-            return { 
-                nome: match[1].slice(0, 1).toLowerCase(), 
-                versao: parseInt(versaoDaMatch ? versaoDaMatch[1] : match[2], 10) 
-            };
-        }
+    /**
+     * @typedef {Object} Deteccao
+     * @property {'client-hints'|'user-agent'|null} metodo
+     * @property {string} userAgent
+     */
 
-        function avisarCliente(navegador, suporte) {
-            var elemento = document.getElementById('infos-ao-cliente');
-            if (elemento) {
-                var textoAviso = "";
-                var classeAviso = "";
-                if (suporte === 0) {
-                    textoAviso = "Seu navegador (app) de internet não suporta este sistema.  ";
-                    classeAviso = 'info';
-                } else if (suporte === 1) {                    
-                    textoAviso = "Seu navegador (app) de internet funciona, mas está um pouco desatualizado. Para uma experiência melhor e mais segura, recomendamos atualizá-lo. Isso garantirá que você continue usando este sistema sem problemas no futuro.  ";
-                    classeAviso = 'info';
-                }
-                elemento.textContent = textoAviso;
-                elemento.className = classeAviso;
-                elemento.style.visibility = 'visible';
-                var link = document.createElement('a');
-                link.href = urlsAtualizacao[navegador.nome] || '#';
-                link.target = '_blank';
-                link.textContent = ' Clique para Atualizar.';
-                elemento.appendChild(link);
-            }
-        }
+    /**
+     * @typedef {Object} Resultado
+     * @property {0|1|2}                               nivel
+     * @property {'suportado'|'desatualizado'|'nao-suportado'} classificacao
+     * @property {boolean} suportado           nivel >= 1
+     * @property {boolean} suportadoCompleto   nivel === 2
+     * @property {boolean} desatualizado       nivel === 1
+     * @property {boolean} naoSuportado        nivel === 0
+     * @property {NavegadorDetectado} navegador
+     * @property {Deteccao}           deteccao
+     * @property {0|1|2}   s  alias legado de nivel
+     * @property {true}    j  alias legado (sempre true)
+     * @property {boolean} f  alias legado de suportadoCompleto
+     * @property {boolean} m  alias legado de suportado
+     */
 
-        var navegador = detectarNavegador();
-        var versaoRequerida = versoes[navegador.nome];
+    /**
+     * @typedef {Object} Mensagens
+     * @property {string} [naoSuportado]
+     * @property {string} [desatualizado]
+     * @property {string} [linkAtualizar]
+     */
 
-        if (!versaoRequerida) return { s: 0, j: true, f: false, m: false };
+    /**
+     * @typedef {Object} Config
+     * @property {Object<string, FaixaVersao>} [versoes]      Override parcial da tabela de versões.
+     * @property {Object<string, string>}      [urls]         Override parcial de URLs de atualização.
+     * @property {Mensagens}                   [mensagens]    Override parcial de textos exibidos.
+     * @property {string|HTMLElement|null|false} [elemento]   Seletor CSS, elemento, ou null/false para desativar DOM.
+     * @property {string}  [classe]          Classe CSS aplicada ao elemento (default: 'info').
+     * @property {boolean} [dispararEvento]  Dispara CustomEvent na window (default: true).
+     * @property {string}  [nomeEvento]      Nome do evento (default: 'navegador:checado').
+     * @property {boolean} [debug]           Imprime diagnóstico no console (default: false).
+     */
 
-        var suporte = navegador.versao >= versaoRequerida[0] ? (navegador.versao >= versaoRequerida[1] ? 2 : 1) : 0;
+    // =========================================================================
+    // CONSTANTES (defaults imutáveis)
+    // =========================================================================
 
-        avisarCliente(navegador, suporte);
-
-        return { 
-            s: suporte, 
-            j: true, 
-            f: suporte === 2, 
-            m: suporte >= 1 
-        };
+    var NOMES_LEGIVEIS = {
+        c:  'Chrome',
+        f:  'Firefox',
+        s:  'Safari',
+        o:  'Opera',
+        e:  'Edge',
+        i:  'Internet Explorer',
+        sm: 'Samsung Internet',
+        b:  'Brave',
+        a:  'Android WebView'
     };
 
-    if (window.addEventListener) {
-        window.addEventListener('load', function() {
-            setTimeout(checarNavegador, 0);
-        });
-    } else if (window.attachEvent) {
-        window.attachEvent('onload', function() {
-            setTimeout(checarNavegador, 0);
-        });
+    /** @type {Object<string, FaixaVersao>} */
+    var VERSOES_PADRAO = {
+        c:  [109,   117],       // Chrome (desktop e Android)
+        f:  [115,   119],       // Firefox
+        s:  [16,    17.4],      // Safari (decimal)
+        o:  [95,    103],       // Opera (OPR)
+        e:  [109,   117],       // Edge Chromium (Edg)
+        i:  [11,    11],        // Internet Explorer 11
+        sm: [24,    24],        // Samsung Internet
+        b:  [1.48,  1.57],      // Brave (via Client Hints)
+        a:  [109,   117]        // Android WebView (aproximação pelo Chrome embutido)
+    };
+
+    var URLS_PADRAO = {
+        c:  'https://www.google.com/intl/pt-BR/chrome/update/',
+        f:  'https://support.mozilla.org/pt-BR/topics/install-and-update/firefox',
+        s:  'https://support.apple.com/pt-br/safari',
+        o:  'https://www.opera.com/pt-br/browsers/opera',
+        e:  'https://www.microsoft.com/pt-br/edge',
+        i:  'https://www.microsoft.com/pt-br/download/internet-explorer.aspx',
+        sm: 'https://www.samsung.com/br/apps/samsung-internet/',
+        b:  'https://brave.com/pt-br/download/',
+        a:  'https://play.google.com/store/apps/details?id=com.google.android.webview'
+    };
+
+    var MENSAGENS_PADRAO = {
+        naoSuportado:  'Seu navegador (app) de internet não suporta este sistema.',
+        desatualizado: 'Seu navegador (app) de internet funciona, mas está um pouco desatualizado. ' +
+                       'Para uma experiência melhor e mais segura, recomendamos atualizá-lo.',
+        linkAtualizar: 'Clique para atualizar.'
+    };
+
+    var CONFIG_PADRAO = {
+        versoes:         VERSOES_PADRAO,
+        urls:            URLS_PADRAO,
+        mensagens:       MENSAGENS_PADRAO,
+        elemento:        '#infos-ao-cliente',
+        classe:          'info',
+        dispararEvento:  true,
+        nomeEvento:      'navegador:checado',
+        debug:           false
+    };
+
+    // =========================================================================
+    // UTILITÁRIOS
+    // =========================================================================
+
+    function ehObjetoSimples(x) {
+        return x !== null && typeof x === 'object' && !ehArray(x);
     }
-})();
+
+    function ehArray(x) {
+        // Array.isArray é IE9+ e robusto a objetos de outros realms (iframes, workers).
+        if (Array.isArray) return Array.isArray(x);
+        return Object.prototype.toString.call(x) === '[object Array]';
+    }
+
+    function clonarRaso(obj) {
+        if (!ehObjetoSimples(obj)) return obj;
+        var r = {};
+        for (var k in obj) {
+            if (Object.prototype.hasOwnProperty.call(obj, k)) r[k] = obj[k];
+        }
+        return r;
+    }
+
+    /**
+     * Mescla override sobre padrão com profundidade fixa de 2 níveis, suficiente
+     * para a estrutura de Config (top-level + versoes/urls/mensagens). Arrays são
+     * sobrescritos integralmente (uma FaixaVersao nunca é mesclada elemento a elemento).
+     */
+    function mesclar(padrao, override) {
+        if (!ehObjetoSimples(override)) return clonarRaso(padrao);
+        var resultado = clonarRaso(padrao);
+        for (var k in override) {
+            if (!Object.prototype.hasOwnProperty.call(override, k)) continue;
+            var v = override[k];
+            if (ehObjetoSimples(v) && ehObjetoSimples(padrao[k])) {
+                resultado[k] = clonarRaso(padrao[k]);
+                for (var kk in v) {
+                    if (Object.prototype.hasOwnProperty.call(v, kk)) {
+                        resultado[k][kk] = v[kk];
+                    }
+                }
+            } else {
+                resultado[k] = v;
+            }
+        }
+        return resultado;
+    }
+
+    /**
+     * Extrai versão (decimal) via regex. Retorna 0 se não encontrar.
+     */
+    function extrair(ua, regex) {
+        var m = ua.match(regex);
+        if (!m || !m[1]) return 0;
+        var n = parseFloat(m[1]);
+        return isNaN(n) ? 0 : n;
+    }
+
+    // =========================================================================
+    // VALIDAÇÃO DE CONFIG (falha rápido com mensagem clara)
+    // =========================================================================
+
+    function avisar(msg) {
+        if (typeof console !== 'undefined' && console && console.warn) console.warn(msg);
+    }
+
+    function validarConfig(config) {
+        if (!ehObjetoSimples(config.versoes)) {
+            throw new TypeError("checarNavegadorCliente: 'versoes' deve ser objeto.");
+        }
+        for (var k in config.versoes) {
+            if (!Object.prototype.hasOwnProperty.call(config.versoes, k)) continue;
+            var faixa = config.versoes[k];
+            if (!ehArray(faixa) || faixa.length !== 2
+                    || typeof faixa[0] !== 'number' || typeof faixa[1] !== 'number'
+                    || isNaN(faixa[0]) || isNaN(faixa[1])) {
+                throw new TypeError(
+                    "checarNavegadorCliente: versoes['" + k + "'] deve ser " +
+                    "[minimaAceitavel, recomendada] com 2 numeros. Recebido: " + JSON.stringify(faixa)
+                );
+            }
+            if (faixa[0] > faixa[1]) {
+                avisar("checarNavegadorCliente: versoes['" + k + "'] tem minima (" + faixa[0] +
+                       ") maior que recomendada (" + faixa[1] + "). Verifique se a intencao e essa.");
+            }
+        }
+        if (!ehObjetoSimples(config.urls)) {
+            throw new TypeError("checarNavegadorCliente: 'urls' deve ser objeto.");
+        }
+        if (!ehObjetoSimples(config.mensagens)) {
+            throw new TypeError("checarNavegadorCliente: 'mensagens' deve ser objeto.");
+        }
+        if (config.elemento !== null && config.elemento !== false
+                && typeof config.elemento !== 'string'
+                && !(config.elemento && typeof config.elemento === 'object')) {
+            throw new TypeError(
+                "checarNavegadorCliente: 'elemento' deve ser seletor (string), HTMLElement, null ou false."
+            );
+        }
+    }
+
+    // =========================================================================
+    // DETECÇÃO (puramente lê navigator)
+    // =========================================================================
+
+    /**
+     * Tenta Client Hints (Chromium 90+). Única forma síncrona de distinguir Brave/Edge/Opera
+     * de Chrome sem heurística de UA. Lê apenas `navigator.userAgentData.brands`
+     * (não faz chamada async a getHighEntropyValues).
+     * @returns {{codigo:string, versao:number}|null}
+     */
+    function viaClientHints() {
+        if (typeof navigator === 'undefined') return null;
+        var uaData = navigator.userAgentData;
+        if (!uaData || !uaData.brands || !uaData.brands.length) return null;
+
+        var prioridades = [
+            { padrao: /Microsoft Edge/i,   codigo: 'e'  },
+            { padrao: /Opera/i,            codigo: 'o'  },
+            { padrao: /Samsung Internet/i, codigo: 'sm' },
+            { padrao: /Brave/i,            codigo: 'b'  },
+            { padrao: /Google Chrome/i,    codigo: 'c'  }
+        ];
+
+        for (var i = 0; i < prioridades.length; i++) {
+            for (var j = 0; j < uaData.brands.length; j++) {
+                var marca = uaData.brands[j];
+                if (marca && marca.brand && prioridades[i].padrao.test(marca.brand)) {
+                    var v = parseFloat(marca.version);
+                    if (!isNaN(v) && v > 0) {
+                        return { codigo: prioridades[i].codigo, versao: v };
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Detecção via UA string. Ordem: do mais específico ao mais genérico.
+     * Regras críticas de ordem:
+     *   - Edg (Chromium Edge) antes de Chrome (UA contém ambos).
+     *   - OPR (Opera moderno) antes de Chrome.
+     *   - SamsungBrowser antes de Chrome.
+     *   - CriOS / FxiOS / EdgiOS antes de Safari (iOS browsers carregam "Safari/" no UA).
+     *   - Android WebView ("; wv)") distinto de Chrome Android.
+     * @returns {{codigo:string, versao:number}|null}
+     */
+    function viaUserAgent() {
+        if (typeof navigator === 'undefined' || !navigator.userAgent) return null;
+        var ua = navigator.userAgent;
+        var v;
+
+        // IE 11
+        if (/Trident\//.test(ua)) {
+            return { codigo: 'i', versao: extrair(ua, /\brv[: ](\d+(?:\.\d+)?)/) || 11 };
+        }
+
+        // Edge Chromium e variantes móveis (antes de Chrome)
+        if ((v = extrair(ua, /\bEdg\/(\d+(?:\.\d+)?)/)))    return { codigo: 'e', versao: v };
+        if ((v = extrair(ua, /\bEdgiOS\/(\d+(?:\.\d+)?)/))) return { codigo: 'e', versao: v };
+        if ((v = extrair(ua, /\bEdgA\/(\d+(?:\.\d+)?)/)))   return { codigo: 'e', versao: v };
+        // Edge legado (EdgeHTML, <= 18)
+        if ((v = extrair(ua, /\bEdge\/(\d+(?:\.\d+)?)/)))   return { codigo: 'e', versao: v };
+
+        // Opera moderno (antes de Chrome)
+        if ((v = extrair(ua, /\bOPR\/(\d+(?:\.\d+)?)/))) return { codigo: 'o', versao: v };
+        // Opera legado
+        if (/\bOpera\//.test(ua)) {
+            v = extrair(ua, /\bVersion\/(\d+(?:\.\d+)?)/) || extrair(ua, /\bOpera\/(\d+(?:\.\d+)?)/);
+            if (v) return { codigo: 'o', versao: v };
+        }
+
+        // Samsung Internet (antes de Chrome)
+        if ((v = extrair(ua, /\bSamsungBrowser\/(\d+(?:\.\d+)?)/))) return { codigo: 'sm', versao: v };
+
+        // Navegadores iOS em WebKit (antes de Safari)
+        if ((v = extrair(ua, /\bCriOS\/(\d+(?:\.\d+)?)/))) return { codigo: 'c', versao: v };
+        if ((v = extrair(ua, /\bFxiOS\/(\d+(?:\.\d+)?)/))) return { codigo: 'f', versao: v };
+
+        // Firefox
+        if ((v = extrair(ua, /\bFirefox\/(\d+(?:\.\d+)?)/))) return { codigo: 'f', versao: v };
+
+        // Chrome e Android WebView
+        if (/\bChrome\//.test(ua)) {
+            v = extrair(ua, /\bChrome\/(\d+(?:\.\d+)?)/);
+            if (!v) return null;
+            if (/;\s*wv\)/.test(ua)) return { codigo: 'a', versao: v };
+            return { codigo: 'c', versao: v };
+        }
+
+        // Safari (Version/ carrega o número humano)
+        if (/\bSafari\//.test(ua)) {
+            v = extrair(ua, /\bVersion\/(\d+(?:\.\d+)?)/);
+            if (v) return { codigo: 's', versao: v };
+        }
+
+        // IE antigo
+        if ((v = extrair(ua, /\bMSIE\s(\d+(?:\.\d+)?)/))) return { codigo: 'i', versao: v };
+
+        return null;
+    }
+
+    /**
+     * Combina Client Hints (preferencial) + UA (fallback).
+     * @returns {{codigo:string, versao:number, metodo:string}|null}
+     */
+    function detectar() {
+        var ch = viaClientHints();
+        if (ch) { ch.metodo = 'client-hints'; return ch; }
+        var ua = viaUserAgent();
+        if (ua) { ua.metodo = 'user-agent'; return ua; }
+        return null;
+    }
+
+    // =========================================================================
+    // AVALIAÇÃO (pura)
+    // =========================================================================
+
+    /**
+     * 0 não-suportado | 1 mínimo (desatualizado) | 2 completo
+     * @param {{codigo:string, versao:number}|null} navegador
+     * @param {Object<string, FaixaVersao>} versoes
+     * @returns {0|1|2}
+     */
+    function calcularNivel(navegador, versoes) {
+        if (!navegador) return 0;
+        var faixa = versoes[navegador.codigo];
+        if (!faixa) return 0;
+        if (navegador.versao >= faixa[1]) return 2;
+        if (navegador.versao >= faixa[0]) return 1;
+        return 0;
+    }
+
+    /**
+     * Monta o objeto Resultado completo. Formato estável — dev pode depender dele.
+     * @returns {Resultado}
+     */
+    function montarResultado(detectado, nivel, config) {
+        var codigo = detectado ? detectado.codigo : null;
+        var faixa  = codigo ? config.versoes[codigo] : null;
+        var navegadorOut = {
+            codigo: codigo,
+            nome:   codigo ? (NOMES_LEGIVEIS[codigo] || codigo) : null,
+            versao: detectado ? detectado.versao : 0,
+            versaoMinima:      faixa ? faixa[0] : null,
+            versaoRecomendada: faixa ? faixa[1] : null,
+            urlAtualizacao:    codigo && config.urls[codigo] ? config.urls[codigo] : null
+        };
+        var classificacao = nivel === 2 ? 'suportado'
+                          : nivel === 1 ? 'desatualizado'
+                          : 'nao-suportado';
+
+        return {
+            nivel:              nivel,
+            classificacao:      classificacao,
+            suportado:          nivel >= 1,
+            suportadoCompleto:  nivel === 2,
+            desatualizado:      nivel === 1,
+            naoSuportado:       nivel === 0,
+            navegador:          navegadorOut,
+            deteccao: {
+                metodo:    detectado ? detectado.metodo : null,
+                userAgent: (typeof navigator !== 'undefined' && navigator.userAgent) || ''
+            },
+            // Aliases legados
+            s: nivel,
+            j: true,
+            f: nivel === 2,
+            m: nivel >= 1
+        };
+    }
+
+    // =========================================================================
+    // EFEITOS COLATERAIS (DOM, evento, console)
+    // =========================================================================
+
+    function resolverElemento(ref) {
+        if (ref === null || ref === false || typeof ref === 'undefined') return null;
+        if (typeof ref === 'string') {
+            if (typeof document === 'undefined' || !document.querySelector) return null;
+            try { return document.querySelector(ref); } catch (_) { return null; }
+        }
+        if (ref && typeof ref === 'object' && ref.nodeType === 1) return ref; // HTMLElement
+        return null;
+    }
+
+    function limparFilhos(el) {
+        while (el.firstChild) el.removeChild(el.firstChild);
+    }
+
+    function adicionarClasse(el, classe) {
+        if (!classe) return;
+        if (el.classList && el.classList.add) { el.classList.add(classe); return; }
+        var atual = el.className || '';
+        var partes = atual.split(/\s+/);
+        for (var i = 0; i < partes.length; i++) if (partes[i] === classe) return;
+        el.className = (atual ? atual + ' ' : '') + classe;
+    }
+
+    /**
+     * Atualiza a div de aviso. Silencioso quando suporte é completo.
+     * Toda falha é isolada — nunca afeta o retorno da checar().
+     */
+    function avisarCliente(resultado, config) {
+        if (resultado.suportadoCompleto) return;
+        var el = resolverElemento(config.elemento);
+        if (!el) return;
+
+        var texto = resultado.naoSuportado ? config.mensagens.naoSuportado : config.mensagens.desatualizado;
+        if (!texto) return;
+
+        limparFilhos(el);
+        el.appendChild(document.createTextNode(texto + ' '));
+        adicionarClasse(el, config.classe);
+        el.style.visibility = 'visible';
+
+        var url = resultado.navegador.urlAtualizacao;
+        if (url) {
+            var link = document.createElement('a');
+            link.href = url;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer'; // mitigação de tabnabbing reverso
+            link.appendChild(document.createTextNode(config.mensagens.linkAtualizar || 'Clique para atualizar.'));
+            el.appendChild(link);
+        }
+    }
+
+    /**
+     * Dispara CustomEvent na window. IE11-safe via fallback initCustomEvent.
+     */
+    function dispararEvento(nome, detalhe) {
+        if (typeof window === 'undefined' || typeof document === 'undefined') return;
+        var evt;
+        try {
+            evt = new CustomEvent(nome, { detail: detalhe });
+        } catch (_) {
+            if (!document.createEvent) return;
+            evt = document.createEvent('CustomEvent');
+            evt.initCustomEvent(nome, false, false, detalhe);
+        }
+        window.dispatchEvent(evt);
+    }
+
+    function logarDebug(config, resultado) {
+        if (!config.debug || typeof console === 'undefined' || !console.info) return;
+        try {
+            console.info('[checarNavegadorCliente]', {
+                metodo:        resultado.deteccao.metodo,
+                codigo:        resultado.navegador.codigo,
+                nome:          resultado.navegador.nome,
+                versao:        resultado.navegador.versao,
+                nivel:         resultado.nivel,
+                classificacao: resultado.classificacao,
+                userAgent:     resultado.deteccao.userAgent
+            });
+        } catch (_) { /* console pode falhar em ambientes bizarros */ }
+    }
+
+    // =========================================================================
+    // API PÚBLICA
+    // =========================================================================
+
+    /**
+     * Executa a checagem com a config fornecida (merged com defaults).
+     * @param {Config} [configUsuario]
+     * @returns {Resultado}
+     */
+    function checar(configUsuario) {
+        var config = mesclar(CONFIG_PADRAO, configUsuario || {});
+        validarConfig(config); // lança TypeError em config inválida — DX: falha explícita
+
+        var detectado = null;
+        try { detectado = detectar(); } catch (_) { detectado = null; }
+
+        var nivel = calcularNivel(detectado, config.versoes);
+        var resultado = montarResultado(detectado, nivel, config);
+
+        try { avisarCliente(resultado, config); } catch (_) { /* DOM isolado */ }
+        if (config.dispararEvento) {
+            try { dispararEvento(config.nomeEvento, resultado); } catch (_) { /* evento isolado */ }
+        }
+        logarDebug(config, resultado);
+
+        return resultado;
+    }
+
+    /**
+     * Flag que controla a auto-execução no evento `load`.
+     * Defina `checarNavegadorCliente.auto = false` antes do load para pular.
+     */
+    checar.auto = true;
+
+    /**
+     * Defaults expostos (somente leitura por convenção). Útil para o dev
+     * inspecionar ou clonar antes de sobrescrever partes.
+     */
+    checar.padroes = {
+        versoes:   VERSOES_PADRAO,
+        urls:      URLS_PADRAO,
+        mensagens: MENSAGENS_PADRAO,
+        nomes:     NOMES_LEGIVEIS,
+        config:    CONFIG_PADRAO
+    };
+
+    /**
+     * Funções internas expostas para teste unitário e introspecção.
+     * Não faz parte da API pública estável — pode mudar entre minor versions.
+     */
+    checar.interno = {
+        detectar:        detectar,
+        viaClientHints:  viaClientHints,
+        viaUserAgent:    viaUserAgent,
+        calcularNivel:   calcularNivel,
+        montarResultado: montarResultado,
+        mesclar:         mesclar,
+        validarConfig:   validarConfig
+    };
+
+    checar.versao = '3.0.0';
+
+    // =========================================================================
+    // AUTO-EXECUÇÃO NO LOAD (opt-out via checar.auto = false)
+    // Noop quando em Node/CommonJS (sem window) — seguro para importação via require/import.
+    // =========================================================================
+
+    (function agendarLoad() {
+        if (typeof window === 'undefined') return;
+        var disparar = function () {
+            if (!checar.auto) return;
+            try { checar(); } catch (_) { /* auto-execução nunca quebra a página */ }
+        };
+        if (window.addEventListener) {
+            window.addEventListener('load', disparar, false);
+        } else if (window.attachEvent) {
+            window.attachEvent('onload', disparar);
+        }
+    })();
+
+    // Factory UMD retorna a função pública. O wrapper acima decide como expô-la.
+    return checar;
+}));
