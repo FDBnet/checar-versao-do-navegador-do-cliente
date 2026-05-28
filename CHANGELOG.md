@@ -4,6 +4,38 @@ Todas as mudanças relevantes deste projeto são documentadas aqui.
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/);
 o projeto segue [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [3.2.0] — 2026-05-28
+
+Mais navegadores reconhecidos, sem mudança no formato do retorno nem na API existente.
+
+### Adicionado
+
+- **Detecção de cinco navegadores que antes caíam silenciosamente como "Chrome"**
+  (recebendo o link de atualização errado), cada um com nome legível, faixa de versão
+  e URL próprios:
+  - `v` — **Vivaldi** (UA `Vivaldi/`), padrão `[6, 7]`.
+  - `y` — **Yandex** (UA `YaBrowser/`), padrão `[23, 24]`.
+  - `uc` — **UC Browser** (UA `UCBrowser/`), padrão `[13, 15]`.
+  - `w` — **Whale / Naver** (UA `Whale/`), padrão `[3, 3]`.
+  - `ddg` — **DuckDuckGo** (UA `DuckDuckGo/`, detectável no Android), padrão `[5, 5]`.
+- **7 novos testes** cobrindo a detecção dessas skins e a arbitragem Client Hints ↔ UA
+  (49 no total, passando no fonte e no minificado).
+
+### Corrigido
+
+- **Skins de Chromium classificadas como Chrome.** Vivaldi, Yandex, UC Browser, Whale e
+  DuckDuckGo não publicam marca própria em Client Hints — aparecem apenas como
+  "Google Chrome". Como o Client Hints tinha prioridade absoluta, esses navegadores eram
+  identificados como Chrome. Agora, quando o Client Hints revela só "Chrome genérico", o
+  user agent é consultado para identificar a skin real (tokens `Vivaldi/`, `YaBrowser/`
+  etc.). Navegadores positivamente identificados pelo Client Hints (Edge, Opera, Samsung,
+  Brave) continuam tendo prioridade.
+
+### Nota
+
+- As faixas de versão padrão dos novos navegadores são conservadoras e podem ser ajustadas
+  por chamada via `versoes`, como qualquer outra entrada da tabela.
+
 ## [3.1.0] — 2026-05-28
 
 Melhorias de performance, segurança e funcionalidade, todas retrocompatíveis. Nenhuma

@@ -1,12 +1,13 @@
 /*!
  * checarNavegadorCliente — detecção, classificação e aviso de navegador do cliente
- * Versão: 3.1.0
+ * Versão: 3.2.0
  * Licença: MIT
  *
  * Destaques:
  *   - Detecção correta de Chrome, Firefox, Safari, Opera, Edge (Chromium), Edge legado,
  *     Samsung Internet, Android WebView, Chrome/Firefox/Edge em iOS, Brave (via Client
- *     Hints) e Internet Explorer 11. Sem colisões silenciosas.
+ *     Hints), Vivaldi, Yandex, UC Browser, Whale, DuckDuckGo e Internet Explorer 11.
+ *     Sem colisões silenciosas.
  *   - Versões decimais preservadas (Safari 17.4, Brave 1.57 etc.).
  *   - User agents desconhecidos degradam para s=0 sem lançar exceção.
  *   - Tabela de versões, URLs, mensagens, seletor do elemento, classe CSS e disparo de
@@ -16,6 +17,11 @@
  *   - Dispara CustomEvent 'navegador:checado' na window para integração desacoplada.
  *   - Modo debug opcional para inspeção em tempo de desenvolvimento.
  *   - Compatibilidade ES5 / IE11 mantida. Sem dependências.
+ *
+ * Novidades da 3.2.0:
+ *   - Mais navegadores reconhecidos (antes caíam como "Chrome"): Vivaldi, Yandex,
+ *     UC Browser, Whale e DuckDuckGo. Quando o Client Hints só revela "Chrome genérico",
+ *     o user agent é consultado para identificar a skin real.
  *
  * Novidades da 3.1.0:
  *   - Performance: detecção memoizada (regex roda uma vez por navegador) e regexes/tabelas
@@ -73,7 +79,7 @@
 
     /**
      * @typedef {Object} NavegadorDetectado
-     * @property {string|null} codigo             Código curto ('c','f','s','o','e','i','sm','b','a') ou null.
+     * @property {string|null} codigo             Código curto ('c','f','s','o','e','i','sm','b','a','v','y','uc','ddg','w') ou null.
      * @property {string|null} nome               Nome legível ('Chrome','Firefox'...) ou null.
      * @property {number}      versao             Versão detectada (pode ser decimal). 0 se desconhecido.
      * @property {number|null} versaoMinima       Mínima aceitável conforme config.
@@ -129,40 +135,55 @@
     // =========================================================================
 
     var NOMES_LEGIVEIS = {
-        c:  'Chrome',
-        f:  'Firefox',
-        s:  'Safari',
-        o:  'Opera',
-        e:  'Edge',
-        i:  'Internet Explorer',
-        sm: 'Samsung Internet',
-        b:  'Brave',
-        a:  'Android WebView'
+        c:   'Chrome',
+        f:   'Firefox',
+        s:   'Safari',
+        o:   'Opera',
+        e:   'Edge',
+        i:   'Internet Explorer',
+        sm:  'Samsung Internet',
+        b:   'Brave',
+        a:   'Android WebView',
+        v:   'Vivaldi',
+        y:   'Yandex',
+        uc:  'UC Browser',
+        ddg: 'DuckDuckGo',
+        w:   'Whale'
     };
 
     /** @type {Object<string, FaixaVersao>} */
     var VERSOES_PADRAO = {
-        c:  [109,   117],       // Chrome (desktop e Android)
-        f:  [115,   119],       // Firefox
-        s:  [16,    17.4],      // Safari (decimal)
-        o:  [95,    103],       // Opera (OPR)
-        e:  [109,   117],       // Edge Chromium (Edg)
-        i:  [11,    11],        // Internet Explorer 11
-        sm: [24,    24],        // Samsung Internet
-        b:  [1.48,  1.57],      // Brave (via Client Hints)
-        a:  [109,   117]        // Android WebView (aproximação pelo Chrome embutido)
+        c:   [109,   117],      // Chrome (desktop e Android)
+        f:   [115,   119],      // Firefox
+        s:   [16,    17.4],     // Safari (decimal)
+        o:   [95,    103],      // Opera (OPR)
+        e:   [109,   117],      // Edge Chromium (Edg)
+        i:   [11,    11],       // Internet Explorer 11
+        sm:  [24,    24],       // Samsung Internet
+        b:   [1.48,  1.57],     // Brave (via Client Hints)
+        a:   [109,   117],      // Android WebView (aproximação pelo Chrome embutido)
+        v:   [6,     7],        // Vivaldi (versão própria do Vivaldi)
+        y:   [23,    24],       // Yandex Browser (YaBrowser)
+        uc:  [13,    15],       // UC Browser (UCBrowser, dominante em mobile)
+        ddg: [5,     5],        // DuckDuckGo (versão do app; detectável no Android)
+        w:   [3,     3]         // Whale (Naver)
     };
 
     var URLS_PADRAO = {
-        c:  'https://www.google.com/intl/pt-BR/chrome/update/',
-        f:  'https://support.mozilla.org/pt-BR/topics/install-and-update/firefox',
-        s:  'https://support.apple.com/pt-br/safari',
-        o:  'https://www.opera.com/pt-br/browsers/opera',
-        e:  'https://www.microsoft.com/pt-br/edge',
-        i:  'https://www.microsoft.com/pt-br/download/internet-explorer.aspx',
-        sm: 'https://www.samsung.com/br/apps/samsung-internet/',
-        b:  'https://brave.com/pt-br/download/',
-        a:  'https://play.google.com/store/apps/details?id=com.google.android.webview'
+        c:   'https://www.google.com/intl/pt-BR/chrome/update/',
+        f:   'https://support.mozilla.org/pt-BR/topics/install-and-update/firefox',
+        s:   'https://support.apple.com/pt-br/safari',
+        o:   'https://www.opera.com/pt-br/browsers/opera',
+        e:   'https://www.microsoft.com/pt-br/edge',
+        i:   'https://www.microsoft.com/pt-br/download/internet-explorer.aspx',
+        sm:  'https://www.samsung.com/br/apps/samsung-internet/',
+        b:   'https://brave.com/pt-br/download/',
+        a:   'https://play.google.com/store/apps/details?id=com.google.android.webview',
+        v:   'https://vivaldi.com/pt/download/',
+        y:   'https://browser.yandex.com/',
+        uc:  'https://www.ucbrowser.com/',
+        ddg: 'https://duckduckgo.com/app',
+        w:   'https://whale.naver.com/'
     };
 
     var MENSAGENS_PADRAO = {
@@ -364,6 +385,8 @@
      *   - Edg (Chromium Edge) antes de Chrome (UA contém ambos).
      *   - OPR (Opera moderno) antes de Chrome.
      *   - SamsungBrowser antes de Chrome.
+     *   - Vivaldi / YaBrowser / UCBrowser / Whale / DuckDuckGo antes de Chrome (todas
+     *     carregam "Chrome/" no UA).
      *   - CriOS / FxiOS / EdgiOS antes de Safari (iOS browsers carregam "Safari/" no UA).
      *   - Android WebView ("; wv)") distinto de Chrome Android.
      * @returns {{codigo:string, versao:number}|null}
@@ -395,6 +418,14 @@
 
         // Samsung Internet (antes de Chrome)
         if ((v = extrair(ua, /\bSamsungBrowser\/(\d+(?:\.\d+)?)/))) return { codigo: 'sm', versao: v };
+
+        // Outras "skins" de Chromium: o UA contém "Chrome/", então precisam ser testadas
+        // antes do ramo genérico de Chrome para não serem confundidas com ele.
+        if ((v = extrair(ua, /\bYaBrowser\/(\d+(?:\.\d+)?)/)))   return { codigo: 'y',   versao: v };
+        if ((v = extrair(ua, /\bVivaldi\/(\d+(?:\.\d+)?)/)))     return { codigo: 'v',   versao: v };
+        if ((v = extrair(ua, /\bUCBrowser\/(\d+(?:\.\d+)?)/)))   return { codigo: 'uc',  versao: v };
+        if ((v = extrair(ua, /\bWhale\/(\d+(?:\.\d+)?)/)))       return { codigo: 'w',   versao: v };
+        if ((v = extrair(ua, /\bDuckDuckGo\/(\d+(?:\.\d+)?)/)))  return { codigo: 'ddg', versao: v };
 
         // Navegadores iOS em WebKit (antes de Safari)
         if ((v = extrair(ua, /\bCriOS\/(\d+(?:\.\d+)?)/))) return { codigo: 'c', versao: v };
@@ -432,6 +463,12 @@
 
     /**
      * Combina Client Hints (preferencial) + UA (fallback). Memoizado por `navigator`.
+     *
+     * Client Hints é autoritativo quando identifica positivamente um navegador específico
+     * (Edge/Opera/Samsung/Brave). Mas várias "skins" de Chromium (Vivaldi, Yandex, UC,
+     * Whale, DuckDuckGo) NÃO publicam marca própria em Client Hints — aparecem apenas como
+     * "Google Chrome". Nesse caso (CH = Chrome genérico) consultamos o UA, que costuma
+     * revelar a skin real. Assim, o que era silenciosamente "Chrome" passa a ser detectado.
      * @returns {{codigo:string, versao:number, metodo:string}|null}
      */
     function detectar() {
@@ -440,12 +477,23 @@
 
         var res = null;
         var ch = viaClientHints();
-        if (ch) {
+        if (ch && ch.codigo !== 'c') {
+            // CH identificou um navegador específico (não-Chrome) → autoritativo.
             ch.metodo = 'client-hints';
             res = ch;
         } else {
             var ua = viaUserAgent();
-            if (ua) { ua.metodo = 'user-agent'; res = ua; }
+            if (ch && (!ua || ua.codigo === 'c')) {
+                // CH disse "Chrome" e o UA não revelou nada mais específico → Chrome via CH.
+                ch.metodo = 'client-hints';
+                res = ch;
+            } else if (ua) {
+                ua.metodo = 'user-agent';
+                res = ua;
+            } else if (ch) {
+                ch.metodo = 'client-hints';
+                res = ch;
+            }
         }
 
         _navCache = nav;
@@ -677,7 +725,7 @@
         resetarCache:    resetarCache
     };
 
-    checar.versao = '3.1.0';
+    checar.versao = '3.2.0';
 
     // =========================================================================
     // AUTO-EXECUÇÃO (opt-out via checar.auto = false)

@@ -6,16 +6,17 @@
 [![Downloads](https://img.shields.io/npm/dm/checar-versao-do-navegador-do-cliente.svg)](https://www.npmjs.com/package/checar-versao-do-navegador-do-cliente)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Biblioteca JavaScript leve (≈ 11 KB minificada, zero dependências) para detectar o navegador
+Biblioteca JavaScript leve (≈ 12 KB minificada, zero dependências) para detectar o navegador
 do cliente, classificar o nível de suporte e avisar o usuário quando for necessário
 atualizar. Parametrizável por chamada, com API ergonômica para desenvolvedor e
 compatibilidade preservada com IE11.
 
-- **Versão:** 3.1.0
+- **Versão:** 3.2.0
 - **Licença:** MIT
 
 ## Sumário
 
+- [Novidades da 3.2.0](#novidades-da-320)
 - [Novidades da 3.1.0](#novidades-da-310)
 - [O que mudou na v3](#o-que-mudou-na-v3)
 - [Instalação](#instalação)
@@ -32,6 +33,21 @@ compatibilidade preservada com IE11.
 - [Desenvolvimento](#desenvolvimento)
 - [Migrando da v1 para a v3](#migrando-da-v1-para-a-v3)
 - [Contribuições](#contribuições)
+
+## Novidades da 3.2.0
+
+Mais navegadores reconhecidos (retrocompatível — o formato do retorno não mudou):
+
+- **Cinco navegadores novos**, que antes caíam silenciosamente como "Chrome" (e recebiam
+  o link de atualização errado): **Vivaldi** (`v`), **Yandex** (`y`), **UC Browser**
+  (`uc`), **Whale** (`w`) e **DuckDuckGo** (`ddg`). Cada um com nome legível, faixa de
+  versão e URL de atualização próprios.
+- **Arbitragem Client Hints ↔ User Agent:** essas "skins" de Chromium não publicam marca
+  própria em Client Hints (aparecem só como "Google Chrome"). Quando o Client Hints
+  revela apenas Chrome genérico, a biblioteca consulta o user agent para identificar a
+  skin real — corrigindo uma identificação incorreta que era silenciosa.
+
+Detalhes no [CHANGELOG](CHANGELOG.md).
 
 ## Novidades da 3.1.0
 
@@ -322,12 +338,25 @@ checarNavegadorCliente({
 | `sm`   | Samsung Internet     | UA `SamsungBrowser\/` | `[24, 24]` |
 | `b`    | Brave                | Client Hints (UA é idêntico ao Chrome por política de privacidade) | `[1.48, 1.57]` |
 | `a`    | Android WebView      | UA `; wv)` com `Chrome\/` | `[109, 117]` |
+| `v`    | Vivaldi              | UA `Vivaldi\/` | `[6, 7]` |
+| `y`    | Yandex               | UA `YaBrowser\/` | `[23, 24]` |
+| `uc`   | UC Browser           | UA `UCBrowser\/` | `[13, 15]` |
+| `w`    | Whale (Naver)        | UA `Whale\/` | `[3, 3]` |
+| `ddg`  | DuckDuckGo           | UA `DuckDuckGo\/` (Android) | `[5, 5]` |
 | `i`    | Internet Explorer    | UA `Trident\/` / `MSIE ` | `[11, 11]` |
 
 **Nota sobre Brave:** o Brave remove deliberadamente o token "Brave" do user agent.
 A detecção só funciona via Client Hints (Chromium 90+). Em navegadores mais antigos,
 Brave é identificado como Chrome — o que é seguro, porque o Brave segue o ciclo de
 release do Chromium.
+
+**Nota sobre Vivaldi, Yandex, UC Browser, Whale e DuckDuckGo:** são todos baseados em
+Chromium e, ao contrário do Brave, não publicam marca própria em Client Hints — aparecem
+como "Google Chrome". A detecção usa o token específico do user agent (`Vivaldi/`,
+`YaBrowser/` etc.). Quando o Client Hints revela apenas Chrome genérico, a biblioteca
+recorre ao user agent para identificar a skin real. O DuckDuckGo só expõe seu token no
+Android; no iOS o UA é o do Safari (e é classificado como tal). As faixas de versão
+padrão são conservadoras — ajuste via `versoes` conforme sua política de suporte.
 
 ## Como o suporte é classificado
 
@@ -366,9 +395,10 @@ Cada navegador tem uma faixa `[minimaAceitavel, recomendada]`:
 
 Código em ES5 estrito, sem dependências. Testado contra user agents reais de:
 
-- Chrome, Firefox, Safari, Opera, Edge Chromium
+- Chrome, Firefox, Safari, Opera, Edge Chromium, Brave
 - Chrome iOS, Firefox iOS, Edge iOS
 - Samsung Internet, Android WebView
+- Vivaldi, Yandex, UC Browser, Whale, DuckDuckGo
 - Internet Explorer 11
 - User agents desconhecidos (crawlers, apps customizados)
 
