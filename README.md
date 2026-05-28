@@ -14,8 +14,11 @@ compatibilidade preservada com IE11.
 - **Versão:** 3.3.0
 - **Licença:** MIT
 
+👉 **[Demo ao vivo](https://fdbnet.github.io/checar-versao-do-navegador-do-cliente/)** — abra em qualquer navegador (desktop ou celular) e veja a detecção acontecendo.
+
 ## Sumário
 
+- [Demo ao vivo](#demo-ao-vivo)
 - [Novidades da 3.3.0](#novidades-da-330)
 - [Novidades da 3.2.0](#novidades-da-320)
 - [Novidades da 3.1.0](#novidades-da-310)
@@ -121,6 +124,19 @@ Novidades de DX:
   está inválida.
 - Tipagem via JSDoc `@typedef` (intellisense automático no VS Code).
 - Funções internas expostas em `checarNavegadorCliente.interno` para testes.
+
+## Demo ao vivo
+
+**https://fdbnet.github.io/checar-versao-do-navegador-do-cliente/**
+
+A página `demo.html` é publicada no GitHub Pages automaticamente (workflow
+`.github/workflows/pages.yml`) a cada push na `main`. Ela mostra, ao vivo, a detecção do
+seu navegador, o resultado completo da checagem e botões para testar overrides de versão,
+mensagens customizadas e o modo sem DOM. Abra em navegadores diferentes (inclusive no
+celular) para ver a classificação mudar.
+
+> **Para ativar (uma vez):** em *Settings → Pages*, defina **Source: GitHub Actions**.
+> Depois do primeiro deploy, o link acima fica no ar.
 
 ## Instalação
 
@@ -477,6 +493,7 @@ demo.html                         — Página de teste visual manual
 README.md  CHANGELOG.md  LICENSE  — Documentação
 .github/workflows/ci.yml          — CI: testa em Node 14/18/20/22
 .github/workflows/publish.yml     — Publica no npm ao criar uma Release
+.github/workflows/pages.yml       — Publica o demo no GitHub Pages
 package.json                      — Publicação npm
 ```
 
