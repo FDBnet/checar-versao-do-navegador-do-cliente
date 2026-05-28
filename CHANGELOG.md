@@ -4,6 +4,29 @@ Todas as mudanças relevantes deste projeto são documentadas aqui.
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/);
 o projeto segue [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [3.3.0] — 2026-05-28
+
+Mais cinco navegadores reconhecidos, sem mudança no formato do retorno nem na API.
+
+### Adicionado
+
+- **Amazon Silk** (`sl`, UA `Silk/`) e **Maxthon** (`mx`, UA `Maxthon/`) — detectados pela
+  própria versão. Padrões `[90, 100]` e `[6, 7]`.
+- **QQ Browser** (`qq`), **Baidu** (`bd`) e **360** (`360`) — "skins" multi-variante.
+  Como a versão própria não reflete a capacidade real (variam entre desktop/mobile, ou
+  usam o motor **X5** embutido — caso do navegador interno do **WeChat**), são
+  classificados pela **versão do Chrome embutido**, com limiar permissivo `[70, 90]` para
+  não incomodar usuários de motores embutidos antigos que não podem atualizar:
+  - `qq` — tokens `MQQBrowser/` ou `QQBrowser/`.
+  - `bd` — tokens `baiduboxapp/` ou `BaiduBrowser/`.
+  - `360` — tokens `360SE`/`360EE` (o 360 não versiona a si mesmo no UA).
+- **6 novos testes** (55 no total, passando no fonte e no minificado), incluindo o caso do
+  motor X5 do WeChat (classificado pela versão do Chrome, não pela do MQQBrowser).
+
+### Nota
+
+- Todas as faixas padrão são conservadoras e ajustáveis por chamada via `versoes`.
+
 ## [3.2.0] — 2026-05-28
 
 Mais navegadores reconhecidos, sem mudança no formato do retorno nem na API existente.

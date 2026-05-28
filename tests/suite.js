@@ -307,6 +307,55 @@ teste('Chrome genuíno via Client Hints continua Chrome (sem regressão)', funct
     assertEq(r.deteccao.metodo, 'client-hints');
 });
 
+teste('Amazon Silk via Silk/ (versão própria ≈ Chromium)', function () {
+    var s = novoSandbox('Mozilla/5.0 (Linux; Android 11; KFMAWI) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/126.0.6478.122 Safari/537.36 Silk/126.0.6478.122 like Chrome/126.0.6478.122 Mobile Safari/537.36');
+    var r = s.checarNavegadorCliente({ elemento: null, dispararEvento: false });
+    assertEq(r.navegador.codigo, 'sl');
+    assertEq(r.navegador.nome, 'Amazon Silk');
+    assertEq(r.navegador.versao, 126);
+});
+
+teste('Maxthon via Maxthon/ (versão própria)', function () {
+    var s = novoSandbox('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36 Maxthon/7.1.6.2000');
+    var r = s.checarNavegadorCliente({ elemento: null, dispararEvento: false });
+    assertEq(r.navegador.codigo, 'mx');
+    assertEq(r.navegador.versao, 7.1);
+    assertEq(r.classificacao, 'suportado'); // 7.1 >= 7
+});
+
+teste('QQ Browser usa a versão do Chrome embutido (não a do MQQBrowser)', function () {
+    var s = novoSandbox('Mozilla/5.0 (Linux; U; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/107.0.0.0 Mobile Safari/537.36 MQQBrowser/14.1');
+    var r = s.checarNavegadorCliente({ elemento: null, dispararEvento: false });
+    assertEq(r.navegador.codigo, 'qq');
+    assertEq(r.navegador.versao, 107); // Chrome embutido, não 14.1
+    assertEq(r.classificacao, 'suportado');
+});
+
+teste('WeChat (motor X5, MQQBrowser/6.2) classifica pelo Chrome embutido', function () {
+    var s = novoSandbox('Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/86.0.4240.99 MQQBrowser/6.2 Mobile Safari/537.36 MicroMessenger/8.0.30');
+    var r = s.checarNavegadorCliente({ elemento: null, dispararEvento: false });
+    assertEq(r.navegador.codigo, 'qq');
+    assertEq(r.navegador.versao, 86);          // Chrome embutido, não 6.2
+    assertEq(r.classificacao, 'desatualizado'); // 70 <= 86 < 90
+});
+
+teste('Baidu via baiduboxapp usa a versão do Chrome embutido', function () {
+    var s = novoSandbox('Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/99.0.4844.88 Mobile Safari/537.36 baiduboxapp/13.39.0.10');
+    var r = s.checarNavegadorCliente({ elemento: null, dispararEvento: false });
+    assertEq(r.navegador.codigo, 'bd');
+    assertEq(r.navegador.nome, 'Baidu');
+    assertEq(r.navegador.versao, 99);
+});
+
+teste('360 (sem versão própria no UA) usa o Chrome embutido', function () {
+    var s = novoSandbox('Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 QIHU 360SE');
+    var r = s.checarNavegadorCliente({ elemento: null, dispararEvento: false });
+    assertEq(r.navegador.codigo, '360');
+    assertEq(r.navegador.nome, '360 Browser');
+    assertEq(r.navegador.versao, 120);
+    assertEq(r.classificacao, 'suportado');
+});
+
 console.log('');
 console.log('=== Configuração parametrizada ===');
 
@@ -452,7 +501,7 @@ teste('Internos expostos para teste', function () {
 
 teste('Versão exposta', function () {
     var s = novoSandbox('x');
-    assertEq(s.checarNavegadorCliente.versao, '3.2.0');
+    assertEq(s.checarNavegadorCliente.versao, '3.3.0');
 });
 
 teste('Padrões expostos', function () {
@@ -599,7 +648,7 @@ teste('UMD: carregável via require (module.exports)', function () {
     delete require.cache[require.resolve(caminho)];
     var modulo = require(caminho);
     if (typeof modulo !== 'function') throw new Error('module.exports deveria ser função, foi ' + typeof modulo);
-    if (modulo.versao !== '3.2.0') throw new Error('versão errada: ' + modulo.versao);
+    if (modulo.versao !== '3.3.0') throw new Error('versão errada: ' + modulo.versao);
 });
 
 console.log('');
