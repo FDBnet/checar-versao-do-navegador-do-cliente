@@ -1,7 +1,7 @@
 {
   "name": "checar-versao-do-navegador-do-cliente",
-  "version": "3.1.0",
-  "description": "Biblioteca JavaScript leve (~11 KB min) para detectar o navegador do cliente, classificar o nível de suporte e avisar o usuário quando for necessário atualizar. Parametrizável, UMD (script/require/import), IE11-safe.",
+  "version": "3.3.0",
+  "description": "Biblioteca JavaScript leve (~13 KB min) para detectar o navegador do cliente, classificar o nível de suporte e avisar o usuário quando for necessário atualizar. Parametrizável, UMD (script/require/import), IE11-safe.",
   "main": "checarNavegadorCliente.js",
   "module": "checarNavegadorCliente.js",
   "browser": "checarNavegadorCliente.min.js",
