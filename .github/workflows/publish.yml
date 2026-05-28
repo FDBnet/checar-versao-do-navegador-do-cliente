@@ -1,0 +1,51 @@
+name: Publish to npm
+
+# Publica no npm quando uma GitHub Release é publicada (tag vX.Y.Z).
+# Também pode ser disparado manualmente em Actions → Publish to npm → Run workflow.
+#
+# Pré-requisito: adicionar o secret NPM_TOKEN no repositório
+#   (Settings → Secrets and variables → Actions → New repository secret).
+#   Use um token do tipo "Automation" do npm (ignora 2FA em CI).
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write   # necessário para a provenance do npm
+
+jobs:
+  publish:
+    name: Publicar no npm
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Instalar dependências
+        run: npm install --no-audit --no-fund
+
+      - name: Conferir que a tag corresponde à versão do package.json
+        if: github.event_name == 'release'
+        run: |
+          PKG="$(node -p "require('./package.json').version")"
+          TAG="${GITHUB_REF_NAME#v}"
+          echo "package.json = $PKG | tag = $TAG"
+          if [ "$PKG" != "$TAG" ]; then
+            echo "::error::A tag ($TAG) não corresponde à versão do package.json ($PKG). Bump a versão ou ajuste a tag."
+            exit 1
+          fi
+
+      # `npm publish` dispara o script prepublishOnly (build + test + test:min),
+      # então a versão minificada é regenerada e testada antes de ir ao ar.
+      - name: Publicar no npm
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -451,15 +451,32 @@ npm run build      # Gera checarNavegadorCliente.min.js via Terser
 de qualquer publicação no npm, garantindo que a versão minificada sempre passa
 pelos mesmos testes do fonte.
 
+### Publicação (npm)
+
+A publicação é automatizada pelo workflow `.github/workflows/publish.yml`, disparado
+quando uma **GitHub Release** é publicada. Fluxo:
+
+1. Garanta que a `version` do `package.json` está correta (ex.: `3.3.0`) na `main`.
+2. Crie uma Release no GitHub com a tag `vX.Y.Z` (ex.: `v3.3.0`) — a tag precisa bater
+   com a versão do `package.json` (o workflow verifica e falha se divergir).
+3. O workflow roda `npm publish` (que executa build + test + test:min via `prepublishOnly`)
+   e publica com provenance.
+
+**Pré-requisito (uma vez):** adicione o secret `NPM_TOKEN` em
+*Settings → Secrets and variables → Actions* — use um token do tipo **Automation** do npm.
+
+Também é possível publicar manualmente: `npm login` e `npm publish` a partir da `main`.
+
 ### Estrutura
 
 ```
-checarNavegadorCliente.js         — Fonte UMD (~28 KB, com JSDoc)
-checarNavegadorCliente.min.js     — Minificado via Terser (~11 KB)
+checarNavegadorCliente.js         — Fonte UMD (~36 KB, com JSDoc)
+checarNavegadorCliente.min.js     — Minificado via Terser (~13 KB)
 tests/suite.js                    — Suíte de testes (zero dependências)
 demo.html                         — Página de teste visual manual
 README.md  CHANGELOG.md  LICENSE  — Documentação
 .github/workflows/ci.yml          — CI: testa em Node 14/18/20/22
+.github/workflows/publish.yml     — Publica no npm ao criar uma Release
 package.json                      — Publicação npm
 ```
 
