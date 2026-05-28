@@ -1,6 +1,6 @@
 /*!
  * checarNavegadorCliente — detecção, classificação e aviso de navegador do cliente
- * Versão: 3.0.0
+ * Versão: 3.1.0
  * Licença: MIT
  *
  * Destaques:
@@ -17,10 +17,18 @@
  *   - Modo debug opcional para inspeção em tempo de desenvolvimento.
  *   - Compatibilidade ES5 / IE11 mantida. Sem dependências.
  *
+ * Novidades da 3.1.0:
+ *   - Performance: detecção memoizada (regex roda uma vez por navegador) e regexes/tabelas
+ *     pré-compiladas no escopo do módulo (sem realocação por chamada).
+ *   - Segurança: URLs de atualização passam por allowlist de esquema (bloqueia
+ *     javascript:, data:, vbscript: etc.); merge endurecido contra prototype pollution.
+ *   - Funcionalidade: aviso aparece mais cedo (DOMContentLoaded em vez de load), atributos
+ *     ARIA (role/aria-live) para leitores de tela e callback `aoResultado`.
+ *
  * Exemplos de uso:
  *
  *   // 1) Uso mínimo: adicione <div id="infos-ao-cliente"></div> e o <script>.
- *   //    Roda automaticamente no load com defaults.
+ *   //    Roda automaticamente assim que o DOM fica pronto, com defaults.
  *
  *   // 2) Uso programático com override parcial de versões:
  *   var r = checarNavegadorCliente({
@@ -39,6 +47,9 @@
  *   window.addEventListener('navegador:checado', function (e) {
  *       console.log(e.detail);
  *   });
+ *
+ *   // 5) Callback direto, sem precisar registrar listener antes do load:
+ *   checarNavegadorCliente({ aoResultado: function (r) { if (r.naoSuportado) bloquear(); } });
  */
 (function (root, factory) {
     // UMD: compatível com <script> (global), CommonJS/Node (require) e AMD (define).
@@ -109,6 +120,8 @@
      * @property {boolean} [dispararEvento]  Dispara CustomEvent na window (default: true).
      * @property {string}  [nomeEvento]      Nome do evento (default: 'navegador:checado').
      * @property {boolean} [debug]           Imprime diagnóstico no console (default: false).
+     * @property {boolean} [aria]            Adiciona role/aria-live ao aviso para leitores de tela (default: true).
+     * @property {function(Resultado):void} [aoResultado]  Callback chamado com o Resultado (erros isolados).
      */
 
     // =========================================================================
@@ -167,8 +180,17 @@
         classe:          'info',
         dispararEvento:  true,
         nomeEvento:      'navegador:checado',
-        debug:           false
+        debug:           false,
+        aria:            true,
+        aoResultado:     null
     };
+
+    // Esquemas de URL permitidos no link de atualização. Bloqueia javascript:, data:,
+    // vbscript:, file:, blob: etc. — vetores clássicos de XSS via href.
+    var ESQUEMAS_SEGUROS = { http: 1, https: 1, mailto: 1, tel: 1 };
+
+    // Chaves que jamais podem ser copiadas num merge: vetores de prototype pollution.
+    var CHAVES_PROIBIDAS = { '__proto__': 1, 'constructor': 1, 'prototype': 1 };
 
     // =========================================================================
     // UTILITÁRIOS
@@ -184,11 +206,15 @@
         return Object.prototype.toString.call(x) === '[object Array]';
     }
 
+    function chaveSegura(k) {
+        return !Object.prototype.hasOwnProperty.call(CHAVES_PROIBIDAS, k);
+    }
+
     function clonarRaso(obj) {
         if (!ehObjetoSimples(obj)) return obj;
         var r = {};
         for (var k in obj) {
-            if (Object.prototype.hasOwnProperty.call(obj, k)) r[k] = obj[k];
+            if (Object.prototype.hasOwnProperty.call(obj, k) && chaveSegura(k)) r[k] = obj[k];
         }
         return r;
     }
@@ -197,17 +223,19 @@
      * Mescla override sobre padrão com profundidade fixa de 2 níveis, suficiente
      * para a estrutura de Config (top-level + versoes/urls/mensagens). Arrays são
      * sobrescritos integralmente (uma FaixaVersao nunca é mesclada elemento a elemento).
+     * Chaves perigosas (__proto__, constructor, prototype) são ignoradas para impedir
+     * prototype pollution caso a config venha de uma fonte semi-confiável (JSON externo).
      */
     function mesclar(padrao, override) {
         if (!ehObjetoSimples(override)) return clonarRaso(padrao);
         var resultado = clonarRaso(padrao);
         for (var k in override) {
-            if (!Object.prototype.hasOwnProperty.call(override, k)) continue;
+            if (!Object.prototype.hasOwnProperty.call(override, k) || !chaveSegura(k)) continue;
             var v = override[k];
             if (ehObjetoSimples(v) && ehObjetoSimples(padrao[k])) {
                 resultado[k] = clonarRaso(padrao[k]);
                 for (var kk in v) {
-                    if (Object.prototype.hasOwnProperty.call(v, kk)) {
+                    if (Object.prototype.hasOwnProperty.call(v, kk) && chaveSegura(kk)) {
                         resultado[k][kk] = v[kk];
                     }
                 }
@@ -226,6 +254,24 @@
         if (!m || !m[1]) return 0;
         var n = parseFloat(m[1]);
         return isNaN(n) ? 0 : n;
+    }
+
+    /**
+     * Allowlist de esquema para URLs exibidas como link clicável. Retorna a URL original
+     * se for segura (http/https/mailto/tel ou relativa/âncora), ou null se o esquema for
+     * perigoso. Remove espaços e caracteres de controle antes de inspecionar o esquema,
+     * para que truques do tipo "java\tscript:" ou "  javascript:" não escapem.
+     * @param {string} url
+     * @returns {string|null}
+     */
+    function urlSegura(url) {
+        if (typeof url !== 'string' || !url) return null;
+        var paraEsquema = url.replace(/[\u0000-\u0020\u007F-\u00A0\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]/g, '');
+        var m = paraEsquema.match(/^([a-zA-Z][a-zA-Z0-9+.\-]*):/);
+        if (!m) return url; // sem esquema → relativa, âncora ou query: segura
+        return Object.prototype.hasOwnProperty.call(ESQUEMAS_SEGUROS, m[1].toLowerCase())
+            ? url
+            : null;
     }
 
     // =========================================================================
@@ -269,11 +315,23 @@
                 "checarNavegadorCliente: 'elemento' deve ser seletor (string), HTMLElement, null ou false."
             );
         }
+        if (config.aoResultado != null && typeof config.aoResultado !== 'function') {
+            avisar("checarNavegadorCliente: 'aoResultado' deve ser função; valor ignorado.");
+        }
     }
 
     // =========================================================================
     // DETECÇÃO (puramente lê navigator)
     // =========================================================================
+
+    // Pré-compilada uma vez (não por chamada): ordem do mais específico ao mais genérico.
+    var PRIORIDADES_CH = [
+        { padrao: /Microsoft Edge/i,   codigo: 'e'  },
+        { padrao: /Opera/i,            codigo: 'o'  },
+        { padrao: /Samsung Internet/i, codigo: 'sm' },
+        { padrao: /Brave/i,            codigo: 'b'  },
+        { padrao: /Google Chrome/i,    codigo: 'c'  }
+    ];
 
     /**
      * Tenta Client Hints (Chromium 90+). Única forma síncrona de distinguir Brave/Edge/Opera
@@ -286,21 +344,13 @@
         var uaData = navigator.userAgentData;
         if (!uaData || !uaData.brands || !uaData.brands.length) return null;
 
-        var prioridades = [
-            { padrao: /Microsoft Edge/i,   codigo: 'e'  },
-            { padrao: /Opera/i,            codigo: 'o'  },
-            { padrao: /Samsung Internet/i, codigo: 'sm' },
-            { padrao: /Brave/i,            codigo: 'b'  },
-            { padrao: /Google Chrome/i,    codigo: 'c'  }
-        ];
-
-        for (var i = 0; i < prioridades.length; i++) {
+        for (var i = 0; i < PRIORIDADES_CH.length; i++) {
             for (var j = 0; j < uaData.brands.length; j++) {
                 var marca = uaData.brands[j];
-                if (marca && marca.brand && prioridades[i].padrao.test(marca.brand)) {
+                if (marca && marca.brand && PRIORIDADES_CH[i].padrao.test(marca.brand)) {
                     var v = parseFloat(marca.version);
                     if (!isNaN(v) && v > 0) {
-                        return { codigo: prioridades[i].codigo, versao: v };
+                        return { codigo: PRIORIDADES_CH[i].codigo, versao: v };
                     }
                 }
             }
@@ -373,16 +423,42 @@
         return null;
     }
 
+    // Memo da detecção. `navigator` é um singleton imutável por realm, então o
+    // resultado só muda se o próprio objeto navigator for trocado (ex.: em testes).
+    // Guardar a referência usada torna o cache correto sem invalidação manual.
+    var _navCache = null;
+    var _detCache = null;
+    var _temCache = false;
+
     /**
-     * Combina Client Hints (preferencial) + UA (fallback).
+     * Combina Client Hints (preferencial) + UA (fallback). Memoizado por `navigator`.
      * @returns {{codigo:string, versao:number, metodo:string}|null}
      */
     function detectar() {
+        var nav = (typeof navigator !== 'undefined') ? navigator : null;
+        if (_temCache && nav === _navCache) return _detCache;
+
+        var res = null;
         var ch = viaClientHints();
-        if (ch) { ch.metodo = 'client-hints'; return ch; }
-        var ua = viaUserAgent();
-        if (ua) { ua.metodo = 'user-agent'; return ua; }
-        return null;
+        if (ch) {
+            ch.metodo = 'client-hints';
+            res = ch;
+        } else {
+            var ua = viaUserAgent();
+            if (ua) { ua.metodo = 'user-agent'; res = ua; }
+        }
+
+        _navCache = nav;
+        _detCache = res;
+        _temCache = true;
+        return res;
+    }
+
+    /** Limpa o memo da detecção (útil em testes ou se o navigator for substituído). */
+    function resetarCache() {
+        _navCache = null;
+        _detCache = null;
+        _temCache = false;
     }
 
     // =========================================================================
@@ -417,7 +493,7 @@
             versao: detectado ? detectado.versao : 0,
             versaoMinima:      faixa ? faixa[0] : null,
             versaoRecomendada: faixa ? faixa[1] : null,
-            urlAtualizacao:    codigo && config.urls[codigo] ? config.urls[codigo] : null
+            urlAtualizacao:    codigo && config.urls[codigo] ? urlSegura(config.urls[codigo]) : null
         };
         var classificacao = nivel === 2 ? 'suportado'
                           : nivel === 1 ? 'desatualizado'
@@ -487,6 +563,13 @@
         adicionarClasse(el, config.classe);
         el.style.visibility = 'visible';
 
+        // Acessibilidade: anuncia o aviso a leitores de tela. 'alert'/'assertive' para
+        // não-suportado (crítico), 'status'/'polite' para desatualizado (não interrompe).
+        if (config.aria !== false && el.setAttribute) {
+            el.setAttribute('role', resultado.naoSuportado ? 'alert' : 'status');
+            el.setAttribute('aria-live', resultado.naoSuportado ? 'assertive' : 'polite');
+        }
+
         var url = resultado.navegador.urlAtualizacao;
         if (url) {
             var link = document.createElement('a');
@@ -553,13 +636,16 @@
             try { dispararEvento(config.nomeEvento, resultado); } catch (_) { /* evento isolado */ }
         }
         logarDebug(config, resultado);
+        if (typeof config.aoResultado === 'function') {
+            try { config.aoResultado(resultado); } catch (_) { /* callback isolado */ }
+        }
 
         return resultado;
     }
 
     /**
-     * Flag que controla a auto-execução no evento `load`.
-     * Defina `checarNavegadorCliente.auto = false` antes do load para pular.
+     * Flag que controla a auto-execução quando o DOM fica pronto (DOMContentLoaded).
+     * Defina `checarNavegadorCliente.auto = false` logo após o <script> para pular.
      */
     checar.auto = true;
 
@@ -586,26 +672,50 @@
         calcularNivel:   calcularNivel,
         montarResultado: montarResultado,
         mesclar:         mesclar,
-        validarConfig:   validarConfig
+        validarConfig:   validarConfig,
+        urlSegura:       urlSegura,
+        resetarCache:    resetarCache
     };
 
-    checar.versao = '3.0.0';
+    checar.versao = '3.1.0';
 
     // =========================================================================
-    // AUTO-EXECUÇÃO NO LOAD (opt-out via checar.auto = false)
-    // Noop quando em Node/CommonJS (sem window) — seguro para importação via require/import.
+    // AUTO-EXECUÇÃO (opt-out via checar.auto = false)
+    // Roda assim que o DOM está utilizável (DOMContentLoaded), não no 'load' — este
+    // último espera imagens/iframes e atrasava o aviso por segundos. Se o DOM já
+    // estiver pronto quando o script roda, dispara no próximo tick (dando chance de
+    // definir checar.auto = false logo após o <script>). Executa no máximo uma vez.
+    // Noop quando em Node/CommonJS (sem window) — seguro para require/import.
     // =========================================================================
 
-    (function agendarLoad() {
+    (function agendarAuto() {
         if (typeof window === 'undefined') return;
+
+        var jaRodou = false;
         var disparar = function () {
-            if (!checar.auto) return;
+            if (jaRodou || !checar.auto) return;
+            jaRodou = true;
             try { checar(); } catch (_) { /* auto-execução nunca quebra a página */ }
         };
-        if (window.addEventListener) {
+
+        var prontoAgora = typeof document !== 'undefined' && document.readyState
+            && document.readyState !== 'loading';
+
+        if (prontoAgora) {
+            // DOM já interativo/completo: adia 1 tick para respeitar checar.auto tardio.
+            if (typeof setTimeout === 'function') setTimeout(disparar, 0);
+            else disparar();
+            return;
+        }
+
+        if (typeof document !== 'undefined' && document.addEventListener) {
+            document.addEventListener('DOMContentLoaded', disparar, false);
+            // Rede de segurança: se o DOMContentLoaded não vier, 'load' garante.
+            if (window.addEventListener) window.addEventListener('load', disparar, false);
+        } else if (window.addEventListener) {
             window.addEventListener('load', disparar, false);
         } else if (window.attachEvent) {
-            window.attachEvent('onload', disparar);
+            window.attachEvent('onload', disparar); // IE8: sem DOMContentLoaded
         }
     })();
 

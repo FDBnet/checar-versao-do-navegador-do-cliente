@@ -6,16 +6,17 @@
 [![Downloads](https://img.shields.io/npm/dm/checar-versao-do-navegador-do-cliente.svg)](https://www.npmjs.com/package/checar-versao-do-navegador-do-cliente)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Biblioteca JavaScript leve (≈ 9 KB minificada, zero dependências) para detectar o navegador
+Biblioteca JavaScript leve (≈ 11 KB minificada, zero dependências) para detectar o navegador
 do cliente, classificar o nível de suporte e avisar o usuário quando for necessário
 atualizar. Parametrizável por chamada, com API ergonômica para desenvolvedor e
 compatibilidade preservada com IE11.
 
-- **Versão:** 3.0.0
+- **Versão:** 3.1.0
 - **Licença:** MIT
 
 ## Sumário
 
+- [Novidades da 3.1.0](#novidades-da-310)
 - [O que mudou na v3](#o-que-mudou-na-v3)
 - [Instalação](#instalação)
 - [Uso mínimo](#uso-mínimo)
@@ -31,6 +32,30 @@ compatibilidade preservada com IE11.
 - [Desenvolvimento](#desenvolvimento)
 - [Migrando da v1 para a v3](#migrando-da-v1-para-a-v3)
 - [Contribuições](#contribuições)
+
+## Novidades da 3.1.0
+
+Melhorias retrocompatíveis de performance, segurança e funcionalidade (o formato do
+retorno e a API existente não mudaram):
+
+- **Aviso mais cedo:** a auto-execução agora roda no `DOMContentLoaded` (ou de imediato,
+  se o DOM já estiver pronto), não mais no `load` — que esperava imagens e iframes. Em
+  páginas pesadas, o aviso aparece segundos antes. A execução é garantidamente única.
+- **Acessibilidade:** o elemento de aviso recebe `role`/`aria-live` (`alert`/`assertive`
+  para não-suportado; `status`/`polite` para desatualizado), anunciado por leitores de
+  tela. Desative com `aria: false`.
+- **Callback `aoResultado`:** receba o `Resultado` direto na config, sem precisar registrar
+  um listener de evento antes do load.
+- **Segurança — URLs:** as URLs de atualização passam por uma allowlist de esquema
+  (`http`/`https`/`mailto`/`tel` ou relativas). `javascript:`, `data:`, `vbscript:` etc.
+  são bloqueados (viram `null`), fechando um vetor de XSS quando `urls` vem de fonte
+  semi-confiável.
+- **Segurança — merge:** `mesclar` ignora `__proto__`/`constructor`/`prototype`, prevenindo
+  prototype pollution a partir de config maliciosa.
+- **Performance:** detecção memoizada por `navigator` (regex roda uma vez por página) e
+  tabelas/regexes pré-compiladas no escopo do módulo.
+
+Detalhes completos no [CHANGELOG](CHANGELOG.md).
 
 ## O que mudou na v3
 
@@ -194,12 +219,14 @@ Todos os campos são opcionais. O que você passar é mesclado sobre os defaults
 | `dispararEvento` | `boolean`                                      | `true`                  | Dispara `CustomEvent` na `window`. |
 | `nomeEvento`     | `string`                                       | `'navegador:checado'`   | Nome do evento disparado. |
 | `debug`          | `boolean`                                      | `false`                 | Imprime diagnóstico em `console.info`. |
+| `aria`           | `boolean`                                      | `true`                  | Adiciona `role`/`aria-live` ao aviso para leitores de tela (`alert`/`assertive` quando não-suportado; `status`/`polite` quando desatualizado). |
+| `aoResultado`    | `(resultado) => void`                          | —                       | Callback chamado com o `Resultado` após a checagem. Erros são isolados e nunca quebram a página. |
 
 Também disponíveis como propriedades da função:
 
-- `checarNavegadorCliente.auto` — defina `false` antes do `load` para pular auto-execução.
+- `checarNavegadorCliente.auto` — defina `false` antes do DOM ficar pronto (logo após o `<script>`) para pular a auto-execução.
 - `checarNavegadorCliente.padroes` — objetos com os defaults (`versoes`, `urls`, `mensagens`, `nomes`, `config`).
-- `checarNavegadorCliente.interno` — funções puras para testes (`detectar`, `calcularNivel`, `viaClientHints`, `viaUserAgent`, etc.).
+- `checarNavegadorCliente.interno` — funções puras para testes (`detectar`, `calcularNivel`, `viaClientHints`, `viaUserAgent`, `urlSegura`, `resetarCache`, etc.).
 - `checarNavegadorCliente.versao` — string da versão atual.
 
 ## Retorno (`Resultado`)
@@ -271,6 +298,18 @@ window.addEventListener('navegador:checado', function (e) {
 });
 ```
 
+Como a auto-execução roda no `DOMContentLoaded`, registre o listener antes desse
+momento (no `<head>`, ou antes do `<script>` da biblioteca). Se preferir não depender
+da ordem de carregamento, use o callback `aoResultado`, que é chamado na própria chamada:
+
+```js
+checarNavegadorCliente({
+    aoResultado: function (r) {
+        if (r.naoSuportado) mostrarBloqueio();
+    }
+});
+```
+
 ## Navegadores detectados
 
 | Código | Navegador            | Método primário | Padrão `[min, recomendada]` |
@@ -305,13 +344,23 @@ Cada navegador tem uma faixa `[minimaAceitavel, recomendada]`:
 
 - Nunca usa `innerHTML` — todo texto é inserido via `createTextNode`, imune a XSS
   via atributos textuais.
+- **URLs de atualização passam por allowlist de esquema** antes de virar `href`: só
+  `http:`, `https:`, `mailto:`, `tel:` ou URLs relativas/âncoras são aceitas. Esquemas
+  perigosos (`javascript:`, `data:`, `vbscript:`, `file:`, `blob:`…) são bloqueados e
+  o link simplesmente não é criado — `resultado.navegador.urlAtualizacao` vira `null`.
+  A inspeção ignora espaços e caracteres de controle, então ofuscações como
+  `"java\tscript:"` ou `"  javascript:"` também são barradas.
+- **Merge de configuração endurecido contra prototype pollution:** as chaves
+  `__proto__`, `constructor` e `prototype` são ignoradas, então config maliciosa
+  parseada de JSON externo não consegue contaminar `Object.prototype`.
 - Todos os links de atualização usam `target="_blank"` com `rel="noopener noreferrer"`,
   mitigando tabnabbing reverso mesmo em IE11 e WebViews antigos.
-- URLs de atualização são `https://` explícitos — não herdam HTTP quando a página
+- URLs de atualização padrão são `https://` explícitos — não herdam HTTP quando a página
   estiver em HTTP.
 - A função pode ser chamada várias vezes com segurança: ela limpa os filhos do elemento
   antes de reescrever (idempotente).
-- Falhas de DOM, console ou evento são isoladas em `try/catch` e nunca afetam o retorno.
+- Falhas de DOM, console, evento ou do callback `aoResultado` são isoladas em `try/catch`
+  e nunca afetam o retorno.
 
 ## Compatibilidade
 
@@ -351,8 +400,8 @@ pelos mesmos testes do fonte.
 ### Estrutura
 
 ```
-checarNavegadorCliente.js         — Fonte UMD (~25 KB, com JSDoc)
-checarNavegadorCliente.min.js     — Minificado via Terser (~9 KB)
+checarNavegadorCliente.js         — Fonte UMD (~28 KB, com JSDoc)
+checarNavegadorCliente.min.js     — Minificado via Terser (~11 KB)
 tests/suite.js                    — Suíte de testes (zero dependências)
 demo.html                         — Página de teste visual manual
 README.md  CHANGELOG.md  LICENSE  — Documentação

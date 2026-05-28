@@ -22,11 +22,11 @@ var src = fs.readFileSync(caminho, 'utf8');
 console.log('Testando: ' + alvo);
 console.log('');
 
-function novoSandbox(ua, uaData, elemExistente) {
+function novoSandbox(ua, uaData, elemExistente, estadoDoc) {
     var elementos = {};
     if (elemExistente) {
         elementos['#infos-ao-cliente'] = {
-            nodeType: 1, firstChild: null, className: '', style: {}, children: [],
+            nodeType: 1, firstChild: null, className: '', style: {}, children: [], attributes: {},
             appendChild: function (n) {
                 this.children.push(n);
                 if (!this.firstChild) this.firstChild = n;
@@ -34,6 +34,10 @@ function novoSandbox(ua, uaData, elemExistente) {
             removeChild: function () {
                 this.firstChild = null;
                 this.children = [];
+            },
+            setAttribute: function (k, v) { this.attributes[k] = v; },
+            getAttribute: function (k) {
+                return Object.prototype.hasOwnProperty.call(this.attributes, k) ? this.attributes[k] : null;
             },
             classList: {
                 add: function (c) {
@@ -44,9 +48,12 @@ function novoSandbox(ua, uaData, elemExistente) {
         };
     }
     var listeners = [];
+    var docListeners = [];
     var sb = {
         navigator: { userAgent: ua || '', userAgentData: uaData || null },
         document: {
+            // 'loading' por padrão: força o caminho DOMContentLoaded da auto-execução.
+            readyState: (typeof estadoDoc === 'string') ? estadoDoc : 'loading',
             getElementById: function (id) { return elementos['#' + id] || null; },
             querySelector: function (sel) { return elementos[sel] || null; },
             createElement: function (tag) {
@@ -60,10 +67,12 @@ function novoSandbox(ua, uaData, elemExistente) {
                         this.detail = d;
                     }
                 };
-            }
+            },
+            addEventListener: function (t, fn) { docListeners.push({ t: t, fn: fn }); }
         },
         window: {},
         console: { info: function () {}, warn: function () {} },
+        setTimeout: function (fn) { return fn(); }, // executa síncrono nos testes
         CustomEvent: function (name, opts) {
             this.type = name;
             this.detail = opts && opts.detail;
@@ -90,6 +99,13 @@ function novoSandbox(ua, uaData, elemExistente) {
     }
     sb.__elementos = elementos;
     sb.__listeners = listeners;
+    sb.__docListeners = docListeners;
+    // Helper: dispara um evento de documento (ex.: DOMContentLoaded) nos listeners registrados.
+    sb.__dispararDoc = function (tipo) {
+        for (var i = 0; i < docListeners.length; i++) {
+            if (docListeners[i].t === tipo) docListeners[i].fn({ type: tipo });
+        }
+    };
     return sb;
 }
 
@@ -367,7 +383,7 @@ teste('Internos expostos para teste', function () {
 
 teste('Versão exposta', function () {
     var s = novoSandbox('x');
-    assertEq(s.checarNavegadorCliente.versao, '3.0.0');
+    assertEq(s.checarNavegadorCliente.versao, '3.1.0');
 });
 
 teste('Padrões expostos', function () {
@@ -378,6 +394,135 @@ teste('Padrões expostos', function () {
 });
 
 console.log('');
+console.log('=== Segurança ===');
+
+teste('urlSegura mantém http/https/mailto/relativa e bloqueia esquemas perigosos', function () {
+    var s = novoSandbox('x');
+    var u = s.checarNavegadorCliente.interno.urlSegura;
+    assertEq(u('https://ex.com/a?b=1'), 'https://ex.com/a?b=1');
+    assertEq(u('http://ex.com'), 'http://ex.com');
+    assertEq(u('/caminho/relativo'), '/caminho/relativo');
+    assertEq(u('#ancora'), '#ancora');
+    assertEq(u('mailto:a@b.com'), 'mailto:a@b.com');
+    assertEq(u('javascript:alert(1)'), null);
+    assertEq(u('JavaScript:alert(1)'), null);
+    assertEq(u('  javascript:alert(1)'), null);   // espaços à frente
+    assertEq(u('java\tscript:alert(1)'), null);   // controle no meio do esquema
+    assertEq(u('data:text/html,<x>'), null);
+    assertEq(u('vbscript:msgbox(1)'), null);
+    assertEq(u(''), null);
+    assertEq(u(null), null);
+});
+
+teste('URL de atualização perigosa vira null no resultado e não cria link', function () {
+    var s = novoSandbox('Mozilla/5.0 AppleWebKit/537 Chrome/50.0 Safari/537', null, true);
+    var r = s.checarNavegadorCliente({ urls: { c: 'javascript:alert(document.cookie)' }, dispararEvento: false });
+    assertEq(r.navegador.urlAtualizacao, null);
+    var el = s.__elementos['#infos-ao-cliente'];
+    var links = el.children.filter(function (c) { return c.tag === 'a'; });
+    assertEq(links.length, 0);
+});
+
+teste('mesclar ignora __proto__/constructor (sem prototype pollution)', function () {
+    var s = novoSandbox('x');
+    var mesclar = s.checarNavegadorCliente.interno.mesclar;
+    var malicioso = JSON.parse('{"__proto__":{"poluido":true},"versoes":{"__proto__":{"x":1},"c":[1,2]}}');
+    var saida = mesclar({ versoes: { f: [1, 2] } }, malicioso);
+    assertTrue({}.poluido === undefined, 'Object.prototype.poluido vazou');
+    assertTrue({}.x === undefined, 'Object.prototype.x vazou (nível aninhado)');
+    assertEq(saida.versoes.c, [1, 2]); // chaves legítimas continuam funcionando
+});
+
+console.log('');
+console.log('=== Acessibilidade e callback ===');
+
+teste('Não-suportado adiciona role=alert / aria-live=assertive', function () {
+    var s = novoSandbox('Mozilla/5.0 AppleWebKit/537 Chrome/50.0 Safari/537', null, true);
+    s.checarNavegadorCliente({ dispararEvento: false });
+    var el = s.__elementos['#infos-ao-cliente'];
+    assertEq(el.getAttribute('role'), 'alert');
+    assertEq(el.getAttribute('aria-live'), 'assertive');
+});
+
+teste('Desatualizado adiciona role=status / aria-live=polite', function () {
+    var s = novoSandbox('Mozilla/5.0 (Macintosh) AppleWebKit/605 Version/17.3 Safari/605.1.15', null, true);
+    s.checarNavegadorCliente({ dispararEvento: false });
+    var el = s.__elementos['#infos-ao-cliente'];
+    assertEq(el.getAttribute('role'), 'status');
+    assertEq(el.getAttribute('aria-live'), 'polite');
+});
+
+teste('aria:false não adiciona atributos ARIA', function () {
+    var s = novoSandbox('Mozilla/5.0 AppleWebKit/537 Chrome/50.0 Safari/537', null, true);
+    s.checarNavegadorCliente({ dispararEvento: false, aria: false });
+    var el = s.__elementos['#infos-ao-cliente'];
+    assertEq(el.getAttribute('role'), null);
+    assertEq(el.getAttribute('aria-live'), null);
+});
+
+teste('aoResultado é chamado com o Resultado', function () {
+    var s = novoSandbox('Mozilla/5.0 AppleWebKit/537 Chrome/130.0.0.0 Safari/537');
+    var capturado = null;
+    s.checarNavegadorCliente({
+        elemento: null, dispararEvento: false,
+        aoResultado: function (r) { capturado = r; }
+    });
+    assertTrue(capturado, 'callback não foi chamado');
+    assertEq(capturado.navegador.nome, 'Chrome');
+    assertEq(capturado.suportadoCompleto, true);
+});
+
+teste('Erro dentro de aoResultado não quebra checar()', function () {
+    var s = novoSandbox('Mozilla/5.0 AppleWebKit/537 Chrome/130.0.0.0 Safari/537');
+    var r = s.checarNavegadorCliente({
+        elemento: null, dispararEvento: false,
+        aoResultado: function () { throw new Error('boom'); }
+    });
+    assertEq(r.classificacao, 'suportado');
+});
+
+teste('aoResultado inválido apenas avisa (não lança)', function () {
+    var s = novoSandbox('x');
+    var warned = false;
+    s.console.warn = function () { warned = true; };
+    var r = s.checarNavegadorCliente({ elemento: null, dispararEvento: false, aoResultado: 123 });
+    assertTrue(warned, 'deveria avisar sobre aoResultado inválido');
+    assertTrue(r, 'deveria retornar resultado mesmo assim');
+});
+
+console.log('');
+console.log('=== Auto-execução e performance ===');
+
+teste('Auto-execução roda uma única vez no DOMContentLoaded', function () {
+    var s = novoSandbox('Mozilla/5.0 AppleWebKit/537 Chrome/50.0 Safari/537', null, true);
+    var n = 0;
+    s.window.addEventListener('navegador:checado', function () { n++; });
+    s.__dispararDoc('DOMContentLoaded');
+    var loadL = s.__listeners.filter(function (l) { return l.t === 'load'; });
+    for (var i = 0; i < loadL.length; i++) loadL[i].fn(); // 'load' não deve re-executar
+    assertEq(n, 1);
+    assertTrue(s.__elementos['#infos-ao-cliente'].children.length > 0, 'deveria ter avisado');
+});
+
+teste('Auto-execução roda imediatamente se o DOM já está pronto', function () {
+    // readyState=complete + setTimeout síncrono ⇒ auto-execução ocorre na carga do módulo
+    var s = novoSandbox('Mozilla/5.0 AppleWebKit/537 Chrome/50.0 Safari/537', null, true, 'complete');
+    assertTrue(s.__elementos['#infos-ao-cliente'].children.length > 0, 'deveria ter avisado de imediato');
+});
+
+teste('detectar() é memoizado e resetarCache força recomputo', function () {
+    var s = novoSandbox('Mozilla/5.0 AppleWebKit/537 Chrome/130.0.0.0 Safari/537');
+    var interno = s.checarNavegadorCliente.interno;
+    var d1 = interno.detectar();
+    var d2 = interno.detectar();
+    assertTrue(d1 === d2, 'chamadas repetidas deveriam reusar o cache (mesma referência)');
+    interno.resetarCache();
+    var d3 = interno.detectar();
+    assertTrue(d3 !== d1, 'após resetarCache deveria recomputar (nova referência)');
+    assertEq(d3.codigo, d1.codigo);
+});
+
+console.log('');
 console.log('=== UMD ===');
 
 teste('UMD: carregável via require (module.exports)', function () {
@@ -385,7 +530,7 @@ teste('UMD: carregável via require (module.exports)', function () {
     delete require.cache[require.resolve(caminho)];
     var modulo = require(caminho);
     if (typeof modulo !== 'function') throw new Error('module.exports deveria ser função, foi ' + typeof modulo);
-    if (modulo.versao !== '3.0.0') throw new Error('versão errada: ' + modulo.versao);
+    if (modulo.versao !== '3.1.0') throw new Error('versão errada: ' + modulo.versao);
 });
 
 console.log('');
