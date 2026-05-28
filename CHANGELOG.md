@@ -4,6 +4,48 @@ Todas as mudanças relevantes deste projeto são documentadas aqui.
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/);
 o projeto segue [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [3.1.0] — 2026-05-28
+
+Melhorias de performance, segurança e funcionalidade, todas retrocompatíveis. Nenhuma
+mudança no formato do retorno nem na API existente — código da v3.0 continua funcionando.
+
+### Segurança
+
+- **Allowlist de esquema nas URLs de atualização.** Antes de virar `href` de um link
+  (e antes de aparecer em `resultado.navegador.urlAtualizacao`), a URL passa por
+  `urlSegura`: só `http:`, `https:`, `mailto:` e `tel:` (ou URLs relativas/âncoras)
+  são aceitas. Esquemas perigosos como `javascript:`, `data:` e `vbscript:` viram
+  `null` — fechando um vetor de XSS caso `urls` seja configurada a partir de uma
+  fonte semi-confiável (CMS, JSON externo). A checagem ignora espaços e caracteres de
+  controle, então truques de ofuscação (`"java\tscript:"`, `"  javascript:"`) não escapam.
+- **Endurecimento contra prototype pollution no merge de config.** `mesclar`/`clonarRaso`
+  agora ignoram as chaves `__proto__`, `constructor` e `prototype` em ambos os níveis,
+  protegendo contra config maliciosa parseada de JSON externo.
+
+### Performance
+
+- **Detecção memoizada.** O resultado de `detectar()` é cacheado por referência de
+  `navigator` (singleton imutável por realm). Chamadas repetidas de `checarNavegadorCliente`
+  (comuns em SPAs) não re-executam as regexes sobre o user agent. `interno.resetarCache()`
+  limpa o memo quando necessário (testes, navigator substituído).
+- **Tabela de prioridades de Client Hints e regexes pré-compiladas** no escopo do módulo,
+  eliminando realocação de array e objetos `RegExp` a cada chamada.
+
+### Adicionado
+
+- **Auto-execução mais cedo.** O aviso agora roda no `DOMContentLoaded` (ou imediatamente,
+  se o DOM já estiver pronto quando o script carrega) em vez de esperar o evento `load`,
+  que só dispara após imagens e iframes. O `load` permanece como rede de segurança e a
+  execução é garantidamente **única**. Resultado: o aviso aparece segundos antes em
+  páginas pesadas.
+- **Atributos ARIA no aviso** para leitores de tela: `role="alert"` + `aria-live="assertive"`
+  para não-suportado (crítico) e `role="status"` + `aria-live="polite"` para desatualizado.
+  Desativável com `aria: false`.
+- **Callback `aoResultado`** na config: recebe o `Resultado` após a checagem, com erros
+  isolados. Conveniência para quem não quer registrar um listener de evento antes do load.
+- **`interno.urlSegura` e `interno.resetarCache`** expostos para testes/introspecção.
+- **12 novos testes** cobrindo as mudanças acima (42 no total, passando no fonte e no minificado).
+
 ## [3.0.0] — 2026-04-18
 
 Reescrita completa com foco em correção, segurança e experiência do desenvolvedor.
