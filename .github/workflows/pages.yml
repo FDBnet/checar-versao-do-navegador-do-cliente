@@ -1,0 +1,56 @@
+name: Deploy demo to GitHub Pages
+
+# Publica o demo.html no GitHub Pages a cada push na main que toque o demo ou a
+# biblioteca. O site fica em https://<owner>.github.io/<repo>/ (index = demo).
+#
+# Pré-requisito (uma vez): em Settings → Pages, definir "Source: GitHub Actions".
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'demo.html'
+      - 'checarNavegadorCliente.min.js'
+      - 'checarNavegadorCliente.js'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Um deploy por vez; cancela execuções antigas em andamento.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Build e deploy
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Montar o site
+        run: |
+          mkdir -p _site
+          cp demo.html _site/index.html          # raiz do site abre o demo
+          cp demo.html _site/demo.html            # também acessível em /demo.html
+          cp checarNavegadorCliente.min.js _site/ # o demo carrega o minificado
+          cp checarNavegadorCliente.js _site/     # disponível para inspeção
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload do artefato
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy no GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

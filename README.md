@@ -14,8 +14,11 @@ compatibilidade preservada com IE11.
 - **Versão:** 3.3.0
 - **Licença:** MIT
 
+👉 **[Demo ao vivo](https://fdbnet.github.io/checar-versao-do-navegador-do-cliente/)** — abra em qualquer navegador (desktop ou celular) e veja a detecção acontecendo.
+
 ## Sumário
 
+- [Demo ao vivo](#demo-ao-vivo)
 - [Novidades da 3.3.0](#novidades-da-330)
 - [Novidades da 3.2.0](#novidades-da-320)
 - [Novidades da 3.1.0](#novidades-da-310)
@@ -121,6 +124,19 @@ Novidades de DX:
   está inválida.
 - Tipagem via JSDoc `@typedef` (intellisense automático no VS Code).
 - Funções internas expostas em `checarNavegadorCliente.interno` para testes.
+
+## Demo ao vivo
+
+**https://fdbnet.github.io/checar-versao-do-navegador-do-cliente/**
+
+A página `demo.html` é publicada no GitHub Pages automaticamente (workflow
+`.github/workflows/pages.yml`) a cada push na `main`. Ela mostra, ao vivo, a detecção do
+seu navegador, o resultado completo da checagem e botões para testar overrides de versão,
+mensagens customizadas e o modo sem DOM. Abra em navegadores diferentes (inclusive no
+celular) para ver a classificação mudar.
+
+> **Para ativar (uma vez):** em *Settings → Pages*, defina **Source: GitHub Actions**.
+> Depois do primeiro deploy, o link acima fica no ar.
 
 ## Instalação
 
@@ -451,15 +467,33 @@ npm run build      # Gera checarNavegadorCliente.min.js via Terser
 de qualquer publicação no npm, garantindo que a versão minificada sempre passa
 pelos mesmos testes do fonte.
 
+### Publicação (npm)
+
+A publicação é automatizada pelo workflow `.github/workflows/publish.yml`, disparado
+quando uma **GitHub Release** é publicada. Fluxo:
+
+1. Garanta que a `version` do `package.json` está correta (ex.: `3.3.0`) na `main`.
+2. Crie uma Release no GitHub com a tag `vX.Y.Z` (ex.: `v3.3.0`) — a tag precisa bater
+   com a versão do `package.json` (o workflow verifica e falha se divergir).
+3. O workflow roda `npm publish` (que executa build + test + test:min via `prepublishOnly`)
+   e publica com provenance.
+
+**Pré-requisito (uma vez):** adicione o secret `NPM_TOKEN` em
+*Settings → Secrets and variables → Actions* — use um token do tipo **Automation** do npm.
+
+Também é possível publicar manualmente: `npm login` e `npm publish` a partir da `main`.
+
 ### Estrutura
 
 ```
-checarNavegadorCliente.js         — Fonte UMD (~28 KB, com JSDoc)
-checarNavegadorCliente.min.js     — Minificado via Terser (~11 KB)
+checarNavegadorCliente.js         — Fonte UMD (~36 KB, com JSDoc)
+checarNavegadorCliente.min.js     — Minificado via Terser (~13 KB)
 tests/suite.js                    — Suíte de testes (zero dependências)
 demo.html                         — Página de teste visual manual
 README.md  CHANGELOG.md  LICENSE  — Documentação
 .github/workflows/ci.yml          — CI: testa em Node 14/18/20/22
+.github/workflows/publish.yml     — Publica no npm ao criar uma Release
+.github/workflows/pages.yml       — Publica o demo no GitHub Pages
 package.json                      — Publicação npm
 ```
 
